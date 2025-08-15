@@ -132,6 +132,8 @@ Any MCP-compatible client can use this server. The key requirements:
 
 ## 🎛️ Available Tools (19 total)
 
+![Claude Tools Overview](readme/claude-tools.jpeg)
+
 ### Search & Discovery
 - `search_tracks` - Advanced multi-field search with sorting
 - `get_most_played_tracks` - Your hits by genre  
@@ -200,6 +202,10 @@ create_playlist_from_search: {
 }
 ```
 
+![Playlist Creation Example 1](readme/playlistcreation1.jpeg)
+
+![Playlist Creation Example 2](readme/playlistcreation2.jpeg)
+
 ### Library Analysis
 ```
 "What are my top 10 genres by total play time?"
@@ -210,6 +216,8 @@ analyze_library: {
   top_n: 10
 }
 ```
+
+![Library Analysis](readme/analysis.jpeg)
 
 ## 📊 What Data is Available?
 
