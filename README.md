@@ -1,6 +1,6 @@
 # Rekordbox MCP Server
 
-A comprehensive Model Context Protocol (MCP) server for rekordbox database management with real-time database access and mutations.
+A comprehensive Model Context Protocol (MCP) server for rekordbox database management with real-time database access.
 
 **Built using [pyrekordbox](https://github.com/dylanljones/pyrekordbox)** - This project is not affiliated with the pyrekordbox project or its maintainers.
 
@@ -9,8 +9,7 @@ A comprehensive Model Context Protocol (MCP) server for rekordbox database manag
 ### 🗄️ Database Access
 - **Direct SQLite Database Connection**: Access the encrypted rekordbox database directly using pyrekordbox
 - **Real-time Queries**: Search and filter tracks with comprehensive criteria
-- **Live Mutations**: Update play counts, ratings, and metadata in real-time
-- **Automatic Backup**: Safe mutation operations with automatic database backups
+- **Read-Only Operations**: Safe database access without modification risks
 
 ### 🔍 Search & Discovery
 - **Advanced Search**: Multi-field search across artist, title, genre, key, BPM, and more
@@ -25,10 +24,9 @@ A comprehensive Model Context Protocol (MCP) server for rekordbox database manag
 - **DJ History Access**: Full access to your DJ session history and performance data
 
 ### ⚙️ Database Operations
-- **Safe Mutations**: Update track metadata with automatic backup creation
-- **Play Count Management**: Real-time play count updates
-- **Rating System**: 5-star rating system with instant updates
 - **Playlist Access**: View and analyze playlist content including smart playlists
+- **History Analysis**: Access complete DJ session history and performance data
+- **Library Statistics**: Comprehensive analytics and insights
 
 ## Architecture
 
@@ -37,8 +35,8 @@ This project consists of two complementary approaches:
 ### Python Server (Current)
 - **FastMCP Framework**: Modern Python MCP server using FastMCP 2.0
 - **pyrekordbox Integration**: Mature library for encrypted database access
-- **Real-time Database Mutations**: Direct SQLite operations with SQLCipher support
-- **Production Ready**: Built-in logging, error handling, and backup systems
+- **Real-time Database Queries**: Direct SQLite operations with SQLCipher support
+- **Production Ready**: Built-in logging, error handling, and safety features
 
 ### TypeScript Server (Legacy)
 - **XML-based Access**: Uses rekordbox XML exports for read-only operations
@@ -49,17 +47,16 @@ This project consists of two complementary approaches:
 
 **BACKUP YOUR REKORDBOX LIBRARY BEFORE USE**
 
-This software directly accesses and can modify your rekordbox database. **Always create a backup** of your entire rekordbox library before using this tool.
+This software directly accesses your rekordbox database for analysis and querying. While currently read-only, **always create a backup** of your entire rekordbox library before using this tool as a precautionary measure.
 
 ### Backup Requirements
 
-**You must create a complete backup of your rekordbox library before using this software.** Consult rekordbox documentation or support resources for proper backup procedures for your specific setup and rekordbox version.
+**You should create a complete backup of your rekordbox library before using this software.** Consult rekordbox documentation or support resources for proper backup procedures for your specific setup and rekordbox version.
 
 ### Risk Acknowledgment
 
-- ⚠️ **This project can modify your rekordbox database directly**
-- ⚠️ **Database corruption could result in complete data loss**
-- ⚠️ **Use at your own risk - no warranty provided**
+- ⚠️ **This project accesses your rekordbox database directly**
+- ⚠️ **Use at your own risk - no warranty provided**  
 - ⚠️ **Test thoroughly with backups before using on your main library**
 - ⚠️ **The developers are not responsible for any data loss or damage**
 
@@ -129,8 +126,6 @@ Add to your Claude Desktop configuration:
 
 ### Database Operations
 - `connect_database` - Establish database connection
-- `update_track_play_count` - Update track play count
-- `update_track_rating` - Update track rating (0-5 stars)
 
 ### Resources
 - `database-status` - Current connection status and basic stats
@@ -152,11 +147,6 @@ get_recent_sessions(days=30)
 get_session_tracks(session_id="12345")
 ```
 
-### Update play count
-```python
-# Mark a track as played
-update_track_play_count(track_id="12345", play_count=15)
-```
 
 ### Get library insights
 ```python
@@ -169,12 +159,12 @@ get_history_stats()
 
 ## Safety Features
 
-- **Automatic Backups**: Database backups created before any mutation
-- **Read-Only by Default**: Connection established in safe mode  
-- **Validation**: Input validation for all database operations
+- **Read-Only Operations**: Currently operates in read-only mode for safe database access
+- **Connection Validation**: Validates database connections and access
 - **Error Handling**: Comprehensive error handling with detailed logging
+- **Input Validation**: Input validation for all database operations
 
-**⚠️ Important**: These safety features are supplementary protections. They do not eliminate the risk of data loss. Always maintain your own backups and use this software at your own risk.
+**⚠️ Important**: These safety features are supplementary protections. Always maintain your own backups and use this software at your own risk.
 
 ## Development
 
@@ -213,8 +203,7 @@ MIT License
 **⚠️ USE AT YOUR OWN RISK ⚠️**
 
 - This project is **not affiliated** with AlphaTheta (Pioneer DJ) or the pyrekordbox project
-- This software **directly modifies your rekordbox database**
-- **Database corruption or data loss may occur**
+- This software **directly accesses your rekordbox database**
 - **No warranty or guarantee is provided**
 - The developers are **not responsible** for any damage to your rekordbox library
 - **You assume all risk** when using this software

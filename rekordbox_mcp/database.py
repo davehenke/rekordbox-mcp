@@ -21,7 +21,7 @@ class RekordboxDatabase:
     """
     Main interface for rekordbox database operations.
     
-    Handles connection, querying, and mutation operations on the encrypted
+    Handles connection and querying operations on the encrypted
     rekordbox SQLite database using pyrekordbox.
     """
     
@@ -188,95 +188,6 @@ class RekordboxDatabase:
         except (ValueError, Exception):
             return None
     
-    async def update_track_play_count(self, track_id: str, play_count: int) -> bool:
-        """
-        Update the play count for a specific track.
-        
-        Args:
-            track_id: The track's unique identifier
-            play_count: New play count value
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        if not self.db:
-            raise RuntimeError("Database not connected")
-        
-        try:
-            # Create backup before mutation
-            await self._create_backup()
-            
-            # Find and update the track
-            all_content = list(self.db.get_content())
-            content_id = int(track_id)
-            
-            # Find content by ID
-            content = None
-            for c in all_content:
-                if c.ID == content_id:
-                    content = c
-                    break
-            
-            if not content:
-                raise ValueError(f"Track {track_id} not found")
-            
-            # Update play count
-            content.PlayCount = play_count
-            
-            # Commit changes
-            self.db.commit()
-            
-            logger.info(f"Updated play count for track {track_id} to {play_count}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to update play count for track {track_id}: {e}")
-            return False
-    
-    async def update_track_rating(self, track_id: str, rating: int) -> bool:
-        """
-        Update the rating for a specific track.
-        
-        Args:
-            track_id: The track's unique identifier
-            rating: New rating value (0-5)
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        if not self.db:
-            raise RuntimeError("Database not connected")
-        
-        try:
-            # Create backup before mutation
-            await self._create_backup()
-            
-            # Find and update the track
-            all_content = list(self.db.get_content())
-            content_id = int(track_id)
-            
-            # Find content by ID
-            content = None
-            for c in all_content:
-                if c.ID == content_id:
-                    content = c
-                    break
-            
-            if not content:
-                raise ValueError(f"Track {track_id} not found")
-            
-            # Update rating
-            content.Rating = rating
-            
-            # Commit changes
-            self.db.commit()
-            
-            logger.info(f"Updated rating for track {track_id} to {rating}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to update rating for track {track_id}: {e}")
-            return False
     
     async def get_playlists(self) -> List[Playlist]:
         """
@@ -781,20 +692,3 @@ class RekordboxDatabase:
             logger.error(f"Failed to get history stats: {e}")
             return HistoryStats()
     
-    async def _create_backup(self) -> None:
-        """
-        Create a backup of the database before performing mutations.
-        """
-        if not self.database_path:
-            return
-        
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = self.database_path / f"master_backup_{timestamp}.db"
-            
-            # Note: Actual backup implementation would copy the database file
-            # This is a placeholder for the backup logic
-            logger.info(f"Database backup created at {backup_path}")
-            
-        except Exception as e:
-            logger.warning(f"Failed to create database backup: {e}")
