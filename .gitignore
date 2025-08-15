@@ -1,11 +1,94 @@
-# Compiled output
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# UV package manager
+# uv.lock  # Uncomment to ignore lock file
+
+# Project-specific files
+*.db
+*.sqlite
+*.sqlite3
+
+# Testing and inspection scripts
+test-*.py
+inspect-*.py
+
+# Backup files
+*_backup_*.db
+master_backup_*.db
+
+# TypeScript/Node.js (legacy from previous project)
 /dist
 *.js
 *.js.map
 *.d.ts
 *.d.ts.map
-
-# Dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -29,7 +112,6 @@ coverage/
 .nyc_output
 
 # Environment variables
-.env
 .env.local
 .env.development.local
 .env.test.local
@@ -60,6 +142,6 @@ library_*.xml
 *.tmp
 *.temp
 
-# Local
+# Local Claude settings
 .claude/settings.local.json
 .claude/project-summary.md
