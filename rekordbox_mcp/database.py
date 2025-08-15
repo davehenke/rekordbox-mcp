@@ -14,7 +14,7 @@ import pyrekordbox
 from pyrekordbox import Rekordbox6Database
 from loguru import logger
 
-from .models import Track, Playlist, SearchOptions
+from .models import Track, Playlist, SearchOptions, HistorySession, HistoryTrack, HistoryStats
 
 
 class RekordboxDatabase:
@@ -605,6 +605,181 @@ class RekordboxDatabase:
             sample_rate=int(getattr(content, 'SampleRate', 0) or 0),
             comments=getattr(content, 'Commnt', '') or ""
         )
+    
+    async def get_history_sessions(self, include_folders: bool = False) -> List[HistorySession]:
+        """
+        Get all DJ history sessions from the database.
+        
+        Args:
+            include_folders: Whether to include folder entries
+            
+        Returns:
+            List of history sessions
+        """
+        if not self.db:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            # Get all histories, filtering out soft-deleted ones
+            all_histories = list(self.db.get_history())
+            active_histories = [h for h in all_histories if getattr(h, 'rb_local_deleted', 0) == 0]
+            
+            sessions = []
+            for history in active_histories:
+                # Filter by type: Attribute 1 = folder, Attribute 0 = session
+                is_folder = history.Attribute == 1
+                
+                if not include_folders and is_folder:
+                    continue
+                
+                # Get track count for sessions
+                track_count = 0
+                duration_minutes = None
+                if not is_folder:
+                    try:
+                        history_songs = list(self.db.get_history_songs(HistoryID=history.ID))
+                        active_songs = [s for s in history_songs if getattr(s, 'rb_local_deleted', 0) == 0]
+                        track_count = len(active_songs)
+                        
+                        # Calculate duration if we have tracks
+                        if active_songs:
+                            all_content = list(self.db.get_content())
+                            content_lookup = {str(c.ID): c for c in all_content if getattr(c, 'rb_local_deleted', 0) == 0}
+                            
+                            total_seconds = 0
+                            for song in active_songs:
+                                content_id = str(song.ContentID)
+                                if content_id in content_lookup:
+                                    track_length = getattr(content_lookup[content_id], 'Length', 0) or 0
+                                    total_seconds += track_length
+                            duration_minutes = round(total_seconds / 60) if total_seconds > 0 else None
+                    except Exception:
+                        track_count = 0
+                
+                sessions.append(HistorySession(
+                    id=str(history.ID),
+                    name=history.Name or "",
+                    parent_id=str(history.ParentID) if history.ParentID and history.ParentID != "root" else None,
+                    is_folder=is_folder,
+                    date_created=history.DateCreated,
+                    track_count=track_count,
+                    duration_minutes=duration_minutes
+                ))
+            
+            return sessions
+            
+        except Exception as e:
+            logger.error(f"Failed to get history sessions: {e}")
+            return []
+    
+    async def get_session_tracks(self, session_id: str) -> List[HistoryTrack]:
+        """
+        Get all tracks from a specific DJ history session.
+        
+        Args:
+            session_id: The session's unique identifier
+            
+        Returns:
+            List of tracks in the session with performance context
+        """
+        if not self.db:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            # Get songs for this session
+            history_songs = list(self.db.get_history_songs(HistoryID=int(session_id)))
+            active_songs = [s for s in history_songs if getattr(s, 'rb_local_deleted', 0) == 0]
+            
+            # Get all content to match against
+            all_content = list(self.db.get_content())
+            active_content = [c for c in all_content if getattr(c, 'rb_local_deleted', 0) == 0]
+            content_lookup = {str(c.ID): c for c in active_content}
+            
+            # Build tracks list maintaining session order
+            tracks = []
+            sorted_songs = sorted(active_songs, key=lambda x: x.TrackNo)
+            
+            for song in sorted_songs:
+                content_id = str(song.ContentID)
+                if content_id in content_lookup:
+                    content = content_lookup[content_id]
+                    
+                    # Extract track info using same logic as _content_to_track
+                    bmp_value = getattr(content, 'BPM', 0) or 0
+                    bpm_float = float(bmp_value) / 100.0 if bmp_value else 0.0
+                    
+                    artist_name = getattr(content, 'ArtistName', '') or ""
+                    album_name = getattr(content, 'AlbumName', '') or ""
+                    genre_name = getattr(content, 'GenreName', '') or ""
+                    key_name = getattr(content, 'KeyName', '') or ""
+                    
+                    tracks.append(HistoryTrack(
+                        id=str(content.ID),
+                        title=content.Title or "",
+                        artist=artist_name,
+                        album=album_name,
+                        genre=genre_name,
+                        bpm=bpm_float,
+                        key=key_name,
+                        length=int(getattr(content, 'Length', 0) or 0),
+                        track_number=song.TrackNo,
+                        history_id=session_id,
+                        play_order=song.TrackNo
+                    ))
+            
+            return tracks
+            
+        except Exception as e:
+            logger.error(f"Failed to get session tracks for session {session_id}: {e}")
+            return []
+    
+    async def get_history_stats(self) -> HistoryStats:
+        """
+        Get comprehensive statistics about DJ history sessions.
+        
+        Returns:
+            Statistics about all history sessions
+        """
+        if not self.db:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            # Get all sessions (not folders)
+            sessions = await self.get_history_sessions(include_folders=False)
+            
+            # Calculate basic stats
+            total_sessions = len(sessions)
+            total_tracks_played = sum(s.track_count for s in sessions)
+            total_minutes = sum(s.duration_minutes for s in sessions if s.duration_minutes)
+            total_hours_played = total_minutes / 60 if total_minutes > 0 else 0.0
+            avg_session_length = total_minutes / total_sessions if total_sessions > 0 else 0.0
+            
+            # Group sessions by month
+            sessions_by_month = {}
+            for session in sessions:
+                if session.date_created:
+                    try:
+                        # Extract year-month from date string
+                        date_part = session.date_created[:7]  # "2025-08"
+                        sessions_by_month[date_part] = sessions_by_month.get(date_part, 0) + 1
+                    except:
+                        pass
+            
+            # For more detailed stats, we'd need to analyze all tracks
+            # This is a basic implementation
+            return HistoryStats(
+                total_sessions=total_sessions,
+                total_tracks_played=total_tracks_played,
+                total_hours_played=round(total_hours_played, 1),
+                sessions_by_month=sessions_by_month,
+                avg_session_length=round(avg_session_length, 1),
+                favorite_genres=[],  # Would require analyzing all session tracks
+                most_played_track=None  # Would require counting track occurrences
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get history stats: {e}")
+            return HistoryStats()
     
     async def _create_backup(self) -> None:
         """

@@ -13,7 +13,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from .database import RekordboxDatabase
-from .models import Track, Playlist, SearchOptions
+from .models import Track, Playlist, SearchOptions, HistorySession, HistoryTrack, HistoryStats
 
 
 # Initialize FastMCP server
@@ -360,6 +360,145 @@ async def connect_database(database_path: Optional[str] = None) -> Dict[str, str
     except Exception as e:
         logger.error(f"Failed to connect to database: {e}")
         return {"status": "error", "message": f"Failed to connect: {str(e)}"}
+
+
+@mcp.tool()
+async def get_history_sessions(
+    include_folders: bool = False,
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """
+    Get DJ history sessions from rekordbox.
+    
+    Args:
+        include_folders: Whether to include folder entries (years/months)
+        limit: Maximum number of sessions to return
+        
+    Returns:
+        List of history sessions with metadata
+    """
+    await ensure_database_connected()
+    
+    sessions = await db.get_history_sessions(include_folders=include_folders)
+    # Sort by date created, most recent first
+    sessions.sort(key=lambda x: x.date_created or "", reverse=True)
+    return [session.model_dump() for session in sessions[:limit]]
+
+
+@mcp.tool()
+async def get_session_tracks(session_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all tracks from a specific DJ history session.
+    
+    Args:
+        session_id: The session's unique identifier
+        
+    Returns:
+        List of tracks in the session with performance context
+    """
+    await ensure_database_connected()
+    
+    tracks = await db.get_session_tracks(session_id)
+    return [track.model_dump() for track in tracks]
+
+
+@mcp.tool()
+async def get_recent_sessions(days: int = 30) -> List[Dict[str, Any]]:
+    """
+    Get recent DJ history sessions within the specified number of days.
+    
+    Args:
+        days: Number of days to look back (default: 30)
+        
+    Returns:
+        List of recent history sessions
+    """
+    await ensure_database_connected()
+    
+    from datetime import datetime, timedelta
+    cutoff_date = datetime.now() - timedelta(days=days)
+    cutoff_str = cutoff_date.strftime("%Y-%m-%d")
+    
+    sessions = await db.get_history_sessions(include_folders=False)
+    
+    # Filter by date
+    recent_sessions = [
+        s for s in sessions 
+        if s.date_created and s.date_created >= cutoff_str
+    ]
+    
+    # Sort by date, most recent first
+    recent_sessions.sort(key=lambda x: x.date_created or "", reverse=True)
+    return [session.model_dump() for session in recent_sessions]
+
+
+@mcp.tool()
+async def get_history_stats() -> Dict[str, Any]:
+    """
+    Get comprehensive statistics about DJ history sessions.
+    
+    Returns:
+        Statistics about all history sessions including totals and trends
+    """
+    await ensure_database_connected()
+    
+    stats = await db.get_history_stats()
+    return stats.model_dump()
+
+
+@mcp.tool()
+async def search_history_sessions(
+    query: str = "",
+    year: Optional[str] = None,
+    month: Optional[str] = None,
+    min_tracks: Optional[int] = None,
+    limit: int = 50
+) -> List[Dict[str, Any]]:
+    """
+    Search DJ history sessions with various filters.
+    
+    Args:
+        query: Search query for session names
+        year: Filter by year (e.g., "2025")
+        month: Filter by month (e.g., "08" for August)
+        min_tracks: Minimum number of tracks in session
+        limit: Maximum number of results
+        
+    Returns:
+        List of matching history sessions
+    """
+    await ensure_database_connected()
+    
+    sessions = await db.get_history_sessions(include_folders=False)
+    
+    # Apply filters
+    filtered_sessions = []
+    for session in sessions:
+        # Text search
+        if query and query.lower() not in session.name.lower():
+            continue
+            
+        # Date filters
+        if session.date_created:
+            if year and not session.date_created.startswith(year):
+                continue
+            if month and year:
+                month_str = f"{year}-{month.zfill(2)}"
+                if not session.date_created.startswith(month_str):
+                    continue
+        elif year or month:
+            # Skip if date filters specified but no date available
+            continue
+            
+        # Track count filter
+        if min_tracks and session.track_count < min_tracks:
+            continue
+            
+        filtered_sessions.append(session)
+    
+    # Sort by date, most recent first
+    filtered_sessions.sort(key=lambda x: x.date_created or "", reverse=True)
+    return [session.model_dump() for session in filtered_sessions[:limit]]
 
 
 @mcp.resource("file://database-status")

@@ -91,6 +91,63 @@ class Playlist(BaseModel):
         return str(v) if v is not None else None
 
 
+class HistorySession(BaseModel):
+    """
+    Rekordbox DJ history session model.
+    """
+    
+    id: str = Field(..., description="Unique history session identifier")
+    name: str = Field(..., description="Session name (usually date)")
+    parent_id: Optional[str] = Field(None, description="Parent folder ID")
+    is_folder: bool = Field(False, description="Whether this is a folder")
+    date_created: Optional[str] = Field(None, description="Date session was created")
+    track_count: int = Field(0, ge=0, description="Number of tracks in session")
+    duration_minutes: Optional[int] = Field(None, description="Total session duration in minutes")
+    
+    @field_validator('date_created', mode='before')
+    @classmethod
+    def validate_date(cls, v):
+        """Convert datetime objects to strings."""
+        if hasattr(v, 'strftime'):  # datetime object
+            return v.strftime("%Y-%m-%d %H:%M:%S")
+        return str(v) if v is not None else None
+
+
+class HistoryTrack(BaseModel):
+    """
+    Track within a DJ history session with performance context.
+    """
+    
+    # Track basic info (from Track model)
+    id: str = Field(..., description="Track identifier")
+    title: str = Field("", description="Track title")
+    artist: str = Field("", description="Artist name")
+    album: Optional[str] = Field(None, description="Album name")
+    genre: Optional[str] = Field(None, description="Genre")
+    bpm: float = Field(0.0, ge=0, description="Beats per minute")
+    key: Optional[str] = Field(None, description="Musical key")
+    length: int = Field(0, ge=0, description="Track length in seconds")
+    
+    # History-specific context
+    track_number: int = Field(..., ge=1, description="Position in DJ set")
+    history_id: str = Field(..., description="History session ID")
+    play_order: Optional[int] = Field(None, description="Order played in session")
+
+
+class HistoryStats(BaseModel):
+    """
+    Statistics about DJ history sessions.
+    """
+    
+    total_sessions: int = Field(0, ge=0, description="Total number of sessions")
+    total_tracks_played: int = Field(0, ge=0, description="Total tracks across all sessions")
+    total_hours_played: float = Field(0.0, ge=0, description="Total hours of DJ sets")
+    most_played_track: Optional[Dict[str, Any]] = Field(None, description="Most played track across sessions")
+    favorite_genres: List[Dict[str, Any]] = Field(default_factory=list, description="Top genres by play count")
+    sessions_by_month: Dict[str, int] = Field(default_factory=dict, description="Sessions grouped by month")
+    avg_session_length: float = Field(0.0, ge=0, description="Average session length in minutes")
+
+
 class SearchOptions(BaseModel):
     """
     Search criteria for track queries.
