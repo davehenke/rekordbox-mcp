@@ -62,3 +62,4 @@ library_*.xml
 
 # Local
 .claude/settings.local.json
+.claude/project-summary.md
