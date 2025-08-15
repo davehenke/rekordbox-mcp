@@ -1,5 +1,7 @@
 # Rekordbox MCP Server
 
+> **🎧 A Personal Note from the Creator**: I'm a DJ who's experimenting with machine learning and AI to help analyze and improve my sets. However, I would never rely entirely on automation to replace the human elements that make DJing compelling. Putting together a set and experience that moves people remains a deeply human experiences that no algorithm can replicate. This tool is designed to enhance, not replace, your creativity and intuition.
+
 A powerful Model Context Protocol (MCP) server that transforms your rekordbox DJ library into an intelligent, queryable database. Perfect for DJs who want to analyze their music collection, create smart playlists, and integrate rekordbox data with AI assistants and other tools.
 
 > **⚠️ IMPORTANT DISCLAIMER**: rekordbox is a trademark and product of AlphaTheta Corporation (formerly Pioneer DJ Corporation). This project is an unofficial, community-created tool that works with rekordbox XML exports. It is not affiliated with, endorsed by, or supported by AlphaTheta Corporation. Users assume all responsibility for using this software with their rekordbox data.
