@@ -35,18 +35,10 @@ A comprehensive Model Context Protocol (MCP) server for rekordbox database manag
 
 ## Architecture
 
-This project consists of two complementary approaches:
-
-### Python Server (Current)
 - **FastMCP Framework**: Modern Python MCP server using FastMCP 2.0
 - **pyrekordbox Integration**: Mature library for encrypted database access
 - **Real-time Database Queries**: Direct SQLite operations with SQLCipher support
 - **Production Ready**: Built-in logging, error handling, and safety features
-
-### TypeScript Server (Legacy)
-- **XML-based Access**: Uses rekordbox XML exports for read-only operations
-- **MCP SDK**: Built with the official TypeScript MCP SDK
-- **Static Analysis**: Perfect for analysis without database modification risk
 
 ## ⚠️ Important Safety Notice
 
