@@ -4,6 +4,10 @@ A comprehensive Model Context Protocol (MCP) server for rekordbox database manag
 
 **Built using [pyrekordbox](https://github.com/dylanljones/pyrekordbox)** - This project is not affiliated with the pyrekordbox project or its maintainers.
 
+<a href="https://glama.ai/mcp/servers/@davehenke/rekordbox-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@davehenke/rekordbox-mcp/badge" alt="rekordbox-mcp MCP server" />
+</a>
+
 ## Features
 
 ### 🗄️ Database Access
