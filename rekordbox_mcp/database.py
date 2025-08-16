@@ -82,6 +82,26 @@ class RekordboxDatabase:
         """Check if database connection is active."""
         return self._connected and self.db is not None
     
+    async def disconnect(self) -> None:
+        """Properly close the database connection."""
+        if self.db:
+            try:
+                self.db.close()
+                logger.info("Database connection closed")
+            except Exception as e:
+                logger.warning(f"Error closing database connection: {e}")
+            finally:
+                self.db = None
+                self._connected = False
+    
+    def __del__(self):
+        """Cleanup when object is destroyed."""
+        if self.db:
+            try:
+                self.db.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+    
     async def get_track_count(self) -> int:
         """Get total number of active (non-deleted) tracks in the database."""
         if not self.db:
@@ -710,20 +730,30 @@ class RekordboxDatabase:
             # Create backup before mutation
             await self._create_backup()
             
-            # Generate new ID for playlist
-            new_id = self.db.generate_unused_id("DjmdPlaylist")
-            
             # Create playlist using pyrekordbox
             playlist = self.db.create_playlist(
                 name=name,
-                parent_id=parent_id if parent_id and parent_id != "root" else None
+                parent=parent_id if parent_id and parent_id != "root" else None
             )
+            
+            # Debug: check what type playlist is
+            logger.debug(f"playlist type: {type(playlist)}")
+            logger.debug(f"playlist value: {playlist}")
             
             # Commit changes
             self.db.commit()
             
-            logger.info(f"Created playlist '{name}' with ID {playlist.ID}")
-            return str(playlist.ID)
+            # Handle different return types
+            if hasattr(playlist, 'ID'):
+                playlist_id = str(playlist.ID)
+            elif isinstance(playlist, str):
+                playlist_id = playlist
+            else:
+                # Try to get ID from the playlist object
+                playlist_id = str(playlist)
+            
+            logger.info(f"Created playlist '{name}' with ID {playlist_id}")
+            return playlist_id
             
         except Exception as e:
             logger.error(f"Failed to create playlist '{name}': {e}")
@@ -732,6 +762,58 @@ class RekordboxDatabase:
                 self.db.rollback()
             raise RuntimeError(f"Failed to create playlist: {str(e)}")
     
+    async def add_tracks_to_playlist(self, playlist_id: str, track_ids: List[str]) -> Dict[str, Any]:
+        """
+        Add multiple tracks to a playlist.
+        
+        Args:
+            playlist_id: ID of the playlist to modify
+            track_ids: List of track IDs to add
+            
+        Returns:
+            Dictionary with success/failure details
+        """
+        if not self.db:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            # Create backup before mutation
+            await self._create_backup()
+            
+            results = {
+                "added": [],
+                "failed": [],
+                "skipped": []
+            }
+            
+            playlist_int_id = int(playlist_id)
+            
+            for track_id in track_ids:
+                try:
+                    track_int_id = int(track_id)
+                    
+                    # Use the same method as the working single-track function
+                    self.db.add_to_playlist(playlist_int_id, track_int_id)
+                    results["added"].append(track_id)
+                    logger.info(f"Added track {track_id} to playlist {playlist_id}")
+                    
+                except Exception as e:
+                    results["failed"].append({"track_id": track_id, "reason": str(e)})
+                    logger.warning(f"Failed to add track {track_id}: {e}")
+            
+            # Commit all changes
+            self.db.commit()
+            
+            logger.info(f"Batch add to playlist {playlist_id}: {len(results['added'])} added, {len(results['failed'])} failed")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to add tracks to playlist {playlist_id}: {e}")
+            # Rollback on error
+            if hasattr(self.db, 'rollback'):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to add tracks to playlist: {str(e)}")
+
     async def add_track_to_playlist(self, playlist_id: str, track_id: str) -> bool:
         """
         Add a track to an existing playlist.

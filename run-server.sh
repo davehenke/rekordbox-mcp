@@ -51,4 +51,4 @@ fi
 log "🚀 Starting rekordbox MCP server..."
 log "   This will connect to the database on startup."
 log "   If connection fails, the server will exit automatically."
-exec uv run rekordbox-mcp "$@"
+exec uv run rekordbox-mcp --log-level DEBUG "$@"

@@ -553,6 +553,53 @@ async def create_playlist(
         "idempotentHint": True
     }
 )
+async def add_tracks_to_playlist(
+    playlist_id: str,
+    track_ids: List[str]
+) -> Dict[str, Any]:
+    """
+    Add multiple tracks to an existing playlist in one operation.
+    
+    ⚠️ CAUTION: This modifies your rekordbox database!
+    
+    Args:
+        playlist_id: ID of the playlist to modify
+        track_ids: List of track IDs to add
+        
+    Returns:
+        Detailed results of the batch operation
+    """
+    await ensure_database_connected()
+    
+    try:
+        results = await db.add_tracks_to_playlist(playlist_id, track_ids)
+        
+        return {
+            "status": "success",
+            "message": f"Batch add completed: {len(results['added'])} added, {len(results['skipped'])} skipped, {len(results['failed'])} failed",
+            "playlist_id": playlist_id,
+            "summary": {
+                "added_count": len(results['added']),
+                "skipped_count": len(results['skipped']),
+                "failed_count": len(results['failed'])
+            },
+            "details": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to add tracks to playlist: {e}")
+        return {
+            "status": "error",
+            "message": f"Failed to add tracks to playlist: {str(e)}"
+        }
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True
+    }
+)
 async def add_track_to_playlist(
     playlist_id: str,
     track_id: str
@@ -749,6 +796,9 @@ async def ensure_database_connected():
 
 def main():
     """Main entry point for the MCP server."""
+    import sys
+    import signal
+    import asyncio
     
     # Configure logging
     logger.remove()
@@ -758,8 +808,47 @@ def main():
         level="INFO"
     )
     
-    # Run the FastMCP server (database will be initialized on first tool call)
-    mcp.run()
+    # Setup signal handlers for graceful shutdown
+    def signal_handler(signum, frame):
+        logger.info(f"Received signal {signum}, shutting down gracefully...")
+        
+        # Cleanup database connection
+        global db
+        if db:
+            try:
+                # Use asyncio to call the async disconnect method
+                if hasattr(asyncio, '_get_running_loop'):
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(db.disconnect())
+                    except RuntimeError:
+                        # No running loop, create one
+                        asyncio.run(db.disconnect())
+                else:
+                    asyncio.run(db.disconnect())
+            except Exception as e:
+                logger.warning(f"Error during database cleanup: {e}")
+        
+        sys.exit(0)
+    
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    try:
+        # Run the FastMCP server (database will be initialized on first tool call)
+        mcp.run()
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+    except Exception as e:
+        logger.error(f"Server error: {e}")
+    finally:
+        # Final cleanup
+        if db:
+            try:
+                asyncio.run(db.disconnect())
+            except Exception as e:
+                logger.warning(f"Error during final cleanup: {e}")
 
 
 if __name__ == "__main__":

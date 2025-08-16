@@ -9,7 +9,7 @@ A comprehensive Model Context Protocol (MCP) server for rekordbox database manag
 ### 🗄️ Database Access
 - **Direct SQLite Database Connection**: Access the encrypted rekordbox database directly using pyrekordbox
 - **Real-time Queries**: Search and filter tracks with comprehensive criteria
-- **Read-Only Operations**: Safe database access without modification risks
+- **Safe Mutation Operations**: Playlist management with automatic backups and safety annotations
 
 ### 🔍 Search & Discovery
 - **Advanced Search**: Multi-field search across artist, title, genre, key, BPM, and more
@@ -24,7 +24,8 @@ A comprehensive Model Context Protocol (MCP) server for rekordbox database manag
 - **DJ History Access**: Full access to your DJ session history and performance data
 
 ### ⚙️ Database Operations
-- **Playlist Access**: View and analyze playlist content including smart playlists
+- **Playlist Management**: Create, modify, and delete playlists with safety protections
+- **Batch Operations**: Add multiple tracks to playlists efficiently
 - **History Analysis**: Access complete DJ session history and performance data
 - **Library Statistics**: Comprehensive analytics and insights
 
@@ -131,6 +132,28 @@ Add to your Claude Desktop configuration:
 ### Resources
 - `database-status` - Current connection status and basic stats
 
+## Available MCP Tools
+
+### Search & Discovery
+- **`search_tracks`** - Advanced multi-field track search with filtering
+- **`get_library_stats`** - Comprehensive library statistics and analytics
+
+### Playlist Operations
+- **`get_playlists`** - List all playlists including smart playlists
+- **`create_playlist`** - Create new playlists ⚠️ (Mutation)
+- **`add_track_to_playlist`** - Add single track to playlist ⚠️ (Mutation)
+- **`add_tracks_to_playlist`** - Add multiple tracks to playlist in one operation ⚠️ (Mutation)
+- **`remove_track_from_playlist`** - Remove track from playlist ⚠️ (Mutation)
+- **`delete_playlist`** - Delete playlist permanently ⚠️ (Destructive)
+
+### DJ History & Analytics
+- **`get_recent_sessions`** - Access recent DJ session history
+- **`get_session_tracks`** - Get tracks played in specific session
+- **`get_history_stats`** - DJ performance statistics and insights
+
+⚠️ **Mutation operations** modify your rekordbox database and create automatic backups  
+⚠️ **Destructive operations** permanently delete data and require extra confirmation
+
 ## Examples
 
 ### Search for tracks by key and BPM
@@ -158,12 +181,36 @@ get_library_stats()
 get_history_stats()
 ```
 
+### Playlist Management
+```python
+# Create a new playlist
+create_playlist(name="Hidden Bangers", parent_id="root")
+
+# Add single track to playlist
+add_track_to_playlist(playlist_id="136766232", track_id="218048716")
+
+# Add multiple tracks efficiently (recommended for batch operations)
+add_tracks_to_playlist(
+    playlist_id="136766232", 
+    track_ids=["218048716", "253968855", "148359536", "76341043"]
+)
+
+# Remove track from playlist
+remove_track_from_playlist(playlist_id="136766232", track_id="218048716")
+
+# Delete playlist (with safety confirmation)
+delete_playlist(playlist_id="136766232")
+```
+
 ## Safety Features
 
-- **Read-Only Operations**: Currently operates in read-only mode for safe database access
+- **Automatic Backups**: All mutation operations create automatic database backups before changes
+- **FastMCP Safety Annotations**: Proper safety hints for mutation and destructive operations
+- **Smart Playlist Protection**: Prevents deletion of intelligent playlists
 - **Connection Validation**: Validates database connections and access
-- **Error Handling**: Comprehensive error handling with detailed logging
+- **Error Handling**: Comprehensive error handling with detailed logging and rollback
 - **Input Validation**: Input validation for all database operations
+- **Batch Operation Safety**: Detailed reporting on success/failure of batch operations
 
 **⚠️ Important**: These safety features are supplementary protections. Always maintain your own backups and use this software at your own risk.
 
