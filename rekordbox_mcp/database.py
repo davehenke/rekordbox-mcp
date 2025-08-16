@@ -692,3 +692,190 @@ class RekordboxDatabase:
             logger.error(f"Failed to get history stats: {e}")
             return HistoryStats()
     
+    async def create_playlist(self, name: str, parent_id: Optional[str] = None) -> str:
+        """
+        Create a new playlist.
+        
+        Args:
+            name: Name for the new playlist
+            parent_id: Optional parent folder ID
+            
+        Returns:
+            ID of the created playlist
+        """
+        if not self.db:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            # Create backup before mutation
+            await self._create_backup()
+            
+            # Generate new ID for playlist
+            new_id = self.db.generate_unused_id("DjmdPlaylist")
+            
+            # Create playlist using pyrekordbox
+            playlist = self.db.create_playlist(
+                name=name,
+                parent_id=parent_id if parent_id and parent_id != "root" else None
+            )
+            
+            # Commit changes
+            self.db.commit()
+            
+            logger.info(f"Created playlist '{name}' with ID {playlist.ID}")
+            return str(playlist.ID)
+            
+        except Exception as e:
+            logger.error(f"Failed to create playlist '{name}': {e}")
+            # Rollback on error
+            if hasattr(self.db, 'rollback'):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to create playlist: {str(e)}")
+    
+    async def add_track_to_playlist(self, playlist_id: str, track_id: str) -> bool:
+        """
+        Add a track to an existing playlist.
+        
+        Args:
+            playlist_id: ID of the playlist
+            track_id: ID of the track to add
+            
+        Returns:
+            True if successful
+        """
+        if not self.db:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            # Create backup before mutation
+            await self._create_backup()
+            
+            # Verify playlist and track exist
+            playlist_int_id = int(playlist_id)
+            track_int_id = int(track_id)
+            
+            # Add track to playlist using pyrekordbox
+            self.db.add_to_playlist(playlist_int_id, track_int_id)
+            
+            # Commit changes
+            self.db.commit()
+            
+            logger.info(f"Added track {track_id} to playlist {playlist_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to add track {track_id} to playlist {playlist_id}: {e}")
+            # Rollback on error
+            if hasattr(self.db, 'rollback'):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to add track to playlist: {str(e)}")
+    
+    async def remove_track_from_playlist(self, playlist_id: str, track_id: str) -> bool:
+        """
+        Remove a track from a playlist.
+        
+        Args:
+            playlist_id: ID of the playlist
+            track_id: ID of the track to remove
+            
+        Returns:
+            True if successful
+        """
+        if not self.db:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            # Create backup before mutation
+            await self._create_backup()
+            
+            # Remove track from playlist using pyrekordbox
+            playlist_int_id = int(playlist_id)
+            track_int_id = int(track_id)
+            
+            self.db.remove_from_playlist(playlist_int_id, track_int_id)
+            
+            # Commit changes
+            self.db.commit()
+            
+            logger.info(f"Removed track {track_id} from playlist {playlist_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to remove track {track_id} from playlist {playlist_id}: {e}")
+            # Rollback on error
+            if hasattr(self.db, 'rollback'):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to remove track from playlist: {str(e)}")
+    
+    async def delete_playlist(self, playlist_id: str) -> bool:
+        """
+        Delete a playlist.
+        
+        Args:
+            playlist_id: ID of the playlist to delete
+            
+        Returns:
+            True if successful
+        """
+        if not self.db:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            # Create backup before mutation
+            await self._create_backup()
+            
+            # Delete playlist using pyrekordbox
+            playlist_int_id = int(playlist_id)
+            self.db.delete_playlist(playlist_int_id)
+            
+            # Commit changes
+            self.db.commit()
+            
+            logger.info(f"Deleted playlist {playlist_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to delete playlist {playlist_id}: {e}")
+            # Rollback on error
+            if hasattr(self.db, 'rollback'):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to delete playlist: {str(e)}")
+    
+    async def _create_backup(self) -> None:
+        """
+        Create a backup of the database before performing mutations.
+        """
+        if not self.database_path:
+            return
+        
+        try:
+            import shutil
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Try different database file patterns
+            possible_files = [
+                self.database_path / "master.db",
+                self.database_path / "rekordbox" / "master.db",
+                *list(self.database_path.glob("**/master.db")),
+                *list(self.database_path.glob("**/*.db"))
+            ]
+            
+            db_file = None
+            for file_path in possible_files:
+                if file_path.exists() and file_path.is_file():
+                    db_file = file_path
+                    break
+            
+            if db_file:
+                backup_path = self.database_path / f"master_backup_{timestamp}.db"
+                shutil.copy2(db_file, backup_path)
+                logger.info(f"Database backup created: {backup_path}")
+            else:
+                # List available files for debugging
+                all_files = list(self.database_path.rglob("*"))
+                db_files = [f for f in all_files if f.suffix == '.db']
+                logger.warning(f"No database file found for backup. Available .db files: {db_files}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to create database backup: {e}")
+    

@@ -68,6 +68,7 @@ This software directly accesses your rekordbox database for analysis and queryin
 - Python 3.12+
 - rekordbox 6 or 7 installed with an existing library
 - **COMPLETE BACKUP** of your rekordbox library (see safety notice above)
+- **rekordbox must be completely closed** when using this tool
 - Access to your rekordbox database (automatic detection supported)
 
 ### Installation

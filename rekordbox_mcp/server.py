@@ -501,6 +501,205 @@ async def search_history_sessions(
     return [session.model_dump() for session in filtered_sessions[:limit]]
 
 
+# Playlist Mutation Tools (with safety annotations)
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False
+    }
+)
+async def create_playlist(
+    name: str,
+    parent_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new playlist in rekordbox.
+    
+    ⚠️ CAUTION: This modifies your rekordbox database!
+    
+    Args:
+        name: Name for the new playlist
+        parent_id: Optional parent folder ID (omit for root level)
+        
+    Returns:
+        Information about the created playlist
+    """
+    await ensure_database_connected()
+    
+    if not name.strip():
+        raise ValueError("Playlist name cannot be empty")
+    
+    try:
+        playlist_id = await db.create_playlist(name.strip(), parent_id)
+        return {
+            "status": "success",
+            "message": f"Created playlist '{name}'",
+            "playlist_id": playlist_id,
+            "playlist_name": name
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": f"Failed to create playlist: {str(e)}"
+        }
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True
+    }
+)
+async def add_track_to_playlist(
+    playlist_id: str,
+    track_id: str
+) -> Dict[str, Any]:
+    """
+    Add a track to an existing playlist.
+    
+    ⚠️ CAUTION: This modifies your rekordbox database!
+    
+    Args:
+        playlist_id: ID of the playlist to modify
+        track_id: ID of the track to add
+        
+    Returns:
+        Result of the operation
+    """
+    await ensure_database_connected()
+    
+    try:
+        success = await db.add_track_to_playlist(playlist_id, track_id)
+        if success:
+            return {
+                "status": "success",
+                "message": f"Added track {track_id} to playlist {playlist_id}",
+                "playlist_id": playlist_id,
+                "track_id": track_id
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to add track to playlist"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to add track to playlist: {str(e)}"
+        }
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True
+    }
+)
+async def remove_track_from_playlist(
+    playlist_id: str,
+    track_id: str
+) -> Dict[str, Any]:
+    """
+    Remove a track from a playlist.
+    
+    ⚠️ CAUTION: This modifies your rekordbox database!
+    
+    Args:
+        playlist_id: ID of the playlist to modify
+        track_id: ID of the track to remove
+        
+    Returns:
+        Result of the operation
+    """
+    await ensure_database_connected()
+    
+    try:
+        success = await db.remove_track_from_playlist(playlist_id, track_id)
+        if success:
+            return {
+                "status": "success",
+                "message": f"Removed track {track_id} from playlist {playlist_id}",
+                "playlist_id": playlist_id,
+                "track_id": track_id
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to remove track from playlist"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to remove track from playlist: {str(e)}"
+        }
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True
+    }
+)
+async def delete_playlist(playlist_id: str) -> Dict[str, Any]:
+    """
+    Delete a playlist from rekordbox.
+    
+    ⚠️ DANGER: This permanently deletes a playlist and cannot be undone!
+    
+    Args:
+        playlist_id: ID of the playlist to delete
+        
+    Returns:
+        Result of the operation
+    """
+    await ensure_database_connected()
+    
+    try:
+        # Get playlist info before deletion for confirmation
+        playlists = await db.get_playlists()
+        target_playlist = next((p for p in playlists if p.id == playlist_id), None)
+        
+        if not target_playlist:
+            return {
+                "status": "error",
+                "message": f"Playlist {playlist_id} not found"
+            }
+        
+        # Prevent deletion of smart playlists for safety
+        if target_playlist.is_smart_playlist:
+            return {
+                "status": "error",
+                "message": "Cannot delete smart playlists - they are managed by rekordbox"
+            }
+        
+        success = await db.delete_playlist(playlist_id)
+        if success:
+            return {
+                "status": "success",
+                "message": f"Deleted playlist '{target_playlist.name}' ({playlist_id})",
+                "deleted_playlist": {
+                    "id": playlist_id,
+                    "name": target_playlist.name,
+                    "track_count": target_playlist.track_count
+                }
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to delete playlist"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to delete playlist: {str(e)}"
+        }
+
+
 @mcp.resource("file://database-status")
 async def database_status() -> str:
     """Get the current database connection status."""
