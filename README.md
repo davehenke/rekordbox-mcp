@@ -108,34 +108,13 @@ Add to your Claude Desktop configuration:
 
 ## Available Tools
 
-### Search & Query
-- `search_tracks` - Advanced track search with multiple filters
-- `get_track_details` - Detailed track information including metadata
-- `get_library_stats` - Comprehensive library statistics
-- `get_playlists` - List all playlists (including smart playlists)
-- `get_playlist_tracks` - Get tracks in a specific playlist
-
-### DJ History
-- `get_history_sessions` - Browse all DJ session history
-- `get_session_tracks` - Get full tracklist for any DJ session
-- `get_recent_sessions` - Filter recent DJ sessions
-- `get_history_stats` - Comprehensive DJ performance statistics
-- `search_history_sessions` - Search sessions by date, tracks, etc.
-
-### Database Operations
-- `connect_database` - Establish database connection
-
-### Resources
-- `database-status` - Current connection status and basic stats
-
-## Available MCP Tools
-
 ### Search & Discovery
-- **`search_tracks`** - Advanced multi-field track search with filtering
+- **`search_tracks`** - Advanced multi-field track search with filtering (genre, key, BPM, artist, title, rating, etc.)
 - **`get_library_stats`** - Comprehensive library statistics and analytics
 
 ### Playlist Operations
 - **`get_playlists`** - List all playlists including smart playlists
+- **`get_playlist_tracks`** - Get all tracks in a specific playlist
 - **`create_playlist`** - Create new playlists ⚠️ (Mutation)
 - **`add_track_to_playlist`** - Add single track to playlist ⚠️ (Mutation)
 - **`add_tracks_to_playlist`** - Add multiple tracks to playlist in one operation ⚠️ (Mutation)
@@ -143,9 +122,12 @@ Add to your Claude Desktop configuration:
 - **`delete_playlist`** - Delete playlist permanently ⚠️ (Destructive)
 
 ### DJ History & Analytics
-- **`get_recent_sessions`** - Access recent DJ session history
-- **`get_session_tracks`** - Get tracks played in specific session
-- **`get_history_stats`** - DJ performance statistics and insights
+- **`get_recent_sessions`** - Access recent DJ session history and performance data
+- **`get_session_tracks`** - Get all tracks played in a specific session
+- **`get_history_stats`** - Comprehensive DJ performance statistics and insights
+
+### Resources
+- **`database-status`** - Current connection status and basic stats
 
 ⚠️ **Mutation operations** modify your rekordbox database and create automatic backups  
 ⚠️ **Destructive operations** permanently delete data and require extra confirmation
