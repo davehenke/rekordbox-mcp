@@ -923,6 +923,34 @@ class RekordboxDatabase:
                 self.db.rollback()
             raise RuntimeError(f"Failed to delete playlist: {str(e)}")
     
+    async def get_tracks_by_genre(self, genre: str) -> List[str]:
+        """
+        Get filepaths for all tracks matching a genre.
+
+        Args:
+            genre: Genre term to search for (case-insensitive substring match)
+
+        Returns:
+            List of filepaths for matching tracks
+        """
+        if not self.db:
+            raise RuntimeError("Database not connected")
+
+        all_content = list(self.db.get_content())
+        active_content = [c for c in all_content if getattr(c, 'rb_local_deleted', 0) == 0]
+
+        genre_lower = genre.lower()
+        filepaths = []
+
+        for content in active_content:
+            genre_name = getattr(content, 'GenreName', '') or ""
+            if genre_lower in genre_name.lower():
+                file_path = getattr(content, 'FolderPath', '')
+                if file_path:
+                    filepaths.append(file_path)
+
+        return filepaths
+
     async def _create_backup(self) -> None:
         """
         Create a backup of the database before performing mutations.

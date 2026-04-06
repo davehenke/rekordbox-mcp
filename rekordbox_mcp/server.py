@@ -149,19 +149,39 @@ async def get_tracks_by_bpm_range(bpm_min: float, bpm_max: float) -> List[Dict[s
 
 
 @mcp.tool()
+async def get_genre_filepaths(genre: str) -> List[str]:
+    """
+    Get filepaths for all tracks matching a genre.
+
+    This tool is optimized for token efficiency - returns only filepaths.
+    Useful for creating export scripts for selective library exports.
+
+    Args:
+        genre: Genre term to search for (case-insensitive substring match)
+
+    Returns:
+        List of absolute filepaths for matching tracks
+    """
+    await ensure_database_connected()
+
+    filepaths = await db.get_tracks_by_genre(genre)
+    return filepaths
+
+
+@mcp.tool()
 async def get_most_played_tracks(limit: int = 20) -> List[Dict[str, Any]]:
     """
     Get the most played tracks in the library.
-    
+
     Args:
         limit: Maximum number of tracks to return
-        
+
     Returns:
         List of most played tracks
     """
     if not db:
         raise RuntimeError("Database not initialized.")
-    
+
     tracks = await db.get_most_played_tracks(limit)
     return [track.model_dump() for track in tracks]
 
