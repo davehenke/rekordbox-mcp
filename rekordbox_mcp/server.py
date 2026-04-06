@@ -99,13 +99,12 @@ async def get_track_details(track_id: str) -> Dict[str, Any]:
     Returns:
         Detailed track information including metadata, cue points, and play history
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     track = await db.get_track_by_id(track_id)
     if not track:
         raise ValueError(f"Track with ID {track_id} not found")
-    
+
     return track.model_dump()
 
 
@@ -113,16 +112,15 @@ async def get_track_details(track_id: str) -> Dict[str, Any]:
 async def get_tracks_by_key(key: str) -> List[Dict[str, Any]]:
     """
     Get all tracks in a specific musical key.
-    
+
     Args:
         key: Musical key (e.g., "5A", "12B")
-        
+
     Returns:
         List of tracks in the specified key
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     search_options = SearchOptions(key=key, limit=1000)
     tracks = await db.search_tracks(search_options)
     return [track.model_dump() for track in tracks]
@@ -132,16 +130,15 @@ async def get_tracks_by_key(key: str) -> List[Dict[str, Any]]:
 async def get_tracks_by_bpm_range(bpm_min: float, bpm_max: float) -> List[Dict[str, Any]]:
     """
     Get tracks within a specific BPM range.
-    
+
     Args:
         bpm_min: Minimum BPM
         bpm_max: Maximum BPM
-        
+
     Returns:
         List of tracks within the BPM range
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
+    await ensure_database_connected()
     
     search_options = SearchOptions(bpm_min=bpm_min, bpm_max=bpm_max, limit=1000)
     tracks = await db.search_tracks(search_options)
@@ -179,8 +176,7 @@ async def get_most_played_tracks(limit: int = 20) -> List[Dict[str, Any]]:
     Returns:
         List of most played tracks
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
+    await ensure_database_connected()
 
     tracks = await db.get_most_played_tracks(limit)
     return [track.model_dump() for track in tracks]
@@ -197,9 +193,8 @@ async def get_top_rated_tracks(limit: int = 20) -> List[Dict[str, Any]]:
     Returns:
         List of top rated tracks
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     tracks = await db.get_top_rated_tracks(limit)
     return [track.model_dump() for track in tracks]
 
@@ -215,9 +210,8 @@ async def get_unplayed_tracks(limit: int = 50) -> List[Dict[str, Any]]:
     Returns:
         List of unplayed tracks
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     tracks = await db.get_unplayed_tracks(limit)
     return [track.model_dump() for track in tracks]
 
@@ -233,13 +227,12 @@ async def get_track_file_path(track_id: str) -> Dict[str, str]:
     Returns:
         Dictionary containing file path information
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     track = await db.get_track_by_id(track_id)
     if not track:
         raise ValueError(f"Track with ID {track_id} not found")
-    
+
     return {
         "track_id": track_id,
         "file_path": track.file_path or "",
@@ -258,9 +251,8 @@ async def search_tracks_by_filename(filename: str) -> List[Dict[str, Any]]:
     Returns:
         List of tracks matching the filename
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     tracks = await db.search_tracks_by_filename(filename)
     return [track.model_dump() for track in tracks]
 
@@ -282,9 +274,8 @@ async def analyze_library(
     Returns:
         Analysis results
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     analysis = await db.analyze_library(group_by, aggregate_by, top_n)
     return analysis
 
@@ -300,9 +291,8 @@ async def validate_track_ids(track_ids: List[str]) -> Dict[str, Any]:
     Returns:
         Validation results with valid and invalid IDs
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     validation = await db.validate_track_ids(track_ids)
     return validation
 
@@ -332,9 +322,8 @@ async def get_playlist_tracks(playlist_id: str) -> List[Dict[str, Any]]:
     Returns:
         List of tracks in the playlist
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     tracks = await db.get_playlist_tracks(playlist_id)
     return [track.model_dump() for track in tracks]
 
@@ -347,11 +336,10 @@ async def get_library_stats() -> Dict[str, Any]:
     Returns:
         Dictionary containing various library statistics
     """
-    if not db:
-        raise RuntimeError("Database not initialized.")
-    
+    await ensure_database_connected()
+
     stats = await db.get_library_stats()
-    return stats
+    return stats.model_dump()
 
 
 @mcp.tool()
@@ -769,6 +757,79 @@ async def delete_playlist(playlist_id: str) -> Dict[str, Any]:
             "status": "error",
             "message": f"Failed to delete playlist: {str(e)}"
         }
+
+
+# Cleanup Tools
+
+@mcp.tool()
+async def find_broken_tracks() -> Dict[str, Any]:
+    """
+    Scan the library for broken tracks and orphaned playlist references.
+
+    Detects:
+    - Tracks with empty file paths
+    - Apple Music streaming references (can't export to USB/CDJ)
+    - Tracks pointing to files that no longer exist on disk
+    - Orphaned playlist entries referencing deleted tracks (causes blank USB export errors)
+
+    Returns:
+        Report with broken tracks grouped by category and a summary with counts
+    """
+    await ensure_database_connected()
+
+    return await db.find_broken_tracks()
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True
+    }
+)
+async def cleanup_orphaned_playlist_entries() -> Dict[str, Any]:
+    """
+    Remove orphaned playlist entries that reference deleted tracks.
+
+    These orphaned entries cause blank '[1] The file doesn't exist' errors
+    when exporting to USB. This tool removes the stale PlaylistSong rows
+    while preserving all active tracks and playlists.
+
+    ⚠️ CAUTION: This modifies your rekordbox database! A backup is created automatically.
+
+    Returns:
+        Count and details of removed orphaned entries
+    """
+    await ensure_database_connected()
+
+    return await db.remove_orphaned_playlist_entries()
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True
+    }
+)
+async def remove_broken_tracks(track_ids: List[str]) -> Dict[str, Any]:
+    """
+    Soft-delete tracks by ID and remove them from all playlists.
+
+    Use find_broken_tracks first to identify which tracks to remove.
+    Tracks are soft-deleted (marked as deleted in the database, not permanently erased).
+
+    ⚠️ DANGER: This removes tracks from your rekordbox library!
+
+    Args:
+        track_ids: List of track IDs to remove
+
+    Returns:
+        Details of removed tracks and any IDs that were not found
+    """
+    await ensure_database_connected()
+
+    return await db.remove_tracks_by_ids(track_ids)
 
 
 @mcp.resource("file://database-status")

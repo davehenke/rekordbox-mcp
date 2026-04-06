@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-An MCP server that provides Claude with direct read/write access to the rekordbox DJ software database. Built with FastMCP and pyrekordbox, it connects to rekordbox's encrypted SQLite (SQLCipher) database to expose 26 tools and 1 resource for searching tracks, managing playlists, analyzing DJ history, and computing library statistics.
+An MCP server that provides Claude with direct read/write access to the rekordbox DJ software database. Built with FastMCP and pyrekordbox, it connects to rekordbox's encrypted SQLite (SQLCipher) database to expose 29 tools and 1 resource for searching tracks, managing playlists, analyzing DJ history, and computing library statistics.
 
 ## Commands
 
@@ -21,8 +21,8 @@ uv run black rekordbox_mcp/    # format
 uv run ruff rekordbox_mcp/     # lint
 uv run mypy rekordbox_mcp/     # type check
 
-# Tests (no formal test suite yet; test-*.py files are ad-hoc exploration scripts)
-uv run pytest
+# Run tests (82 tests, mocked pyrekordbox — no real database needed)
+uv run pytest tests/ -v
 ```
 
 ## Architecture

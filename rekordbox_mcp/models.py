@@ -35,15 +35,6 @@ class Track(BaseModel):
     color: Optional[str] = Field(None, description="Track color tag")
     comments: Optional[str] = Field(None, description="Track comments")
     
-    @field_validator('key')
-    @classmethod
-    def validate_key(cls, v):
-        """Validate musical key format."""
-        if v and v not in []:  # Add valid key formats
-            # Basic validation - could be more sophisticated
-            pass
-        return v
-    
     def duration_formatted(self) -> str:
         """Get track duration in MM:SS format."""
         if self.length <= 0:
@@ -52,19 +43,6 @@ class Track(BaseModel):
         minutes = self.length // 60
         seconds = self.length % 60
         return f"{minutes}:{seconds:02d}"
-
-
-class CuePoint(BaseModel):
-    """
-    Rekordbox cue point model.
-    """
-    
-    id: str = Field(..., description="Cue point identifier")
-    track_id: str = Field(..., description="Associated track ID")
-    position: float = Field(..., ge=0, description="Position in track (seconds)")
-    type: str = Field(..., description="Cue type (memory, hot, loop, etc.)")
-    name: Optional[str] = Field(None, description="Cue point name/label")
-    color: Optional[str] = Field(None, description="Cue point color")
 
 
 class Playlist(BaseModel):
@@ -212,25 +190,3 @@ class LibraryStats(BaseModel):
             return f"{minutes}m"
 
 
-class DatabaseConnection(BaseModel):
-    """
-    Database connection status model.
-    """
-    
-    is_connected: bool = Field(..., description="Whether database is connected")
-    database_path: Optional[str] = Field(None, description="Path to database")
-    total_tracks: Optional[int] = Field(None, description="Total tracks in database")
-    connection_time: Optional[str] = Field(None, description="When connection was established")
-    last_error: Optional[str] = Field(None, description="Last connection error message")
-
-
-class MutationResult(BaseModel):
-    """
-    Result of a database mutation operation.
-    """
-    
-    success: bool = Field(..., description="Whether operation was successful")
-    message: str = Field(..., description="Success or error message")
-    affected_records: int = Field(0, description="Number of records affected")
-    backup_created: bool = Field(False, description="Whether backup was created")
-    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(), description="Operation timestamp")

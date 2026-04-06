@@ -106,7 +106,7 @@ Add to your Claude Desktop configuration:
 }
 ```
 
-## Available Tools (26 tools + 1 resource)
+## Available Tools (29 tools + 1 resource)
 
 ### Search & Discovery
 - **`search_tracks`** - Advanced multi-field track search with filtering (genre, key, BPM, artist, title, rating, etc.)
@@ -140,6 +140,11 @@ Add to your Claude Desktop configuration:
 - **`get_recent_sessions`** - Get sessions within a specified number of days
 - **`search_history_sessions`** - Search sessions by name, year, month, or minimum track count
 - **`get_history_stats`** - Comprehensive DJ performance statistics and insights
+
+### Library Cleanup
+- **`find_broken_tracks`** - Scan for missing files, Apple Music streams, empty paths, and orphaned playlist refs
+- **`cleanup_orphaned_playlist_entries`** - Remove stale playlist entries referencing deleted tracks ⚠️ (Mutation)
+- **`remove_broken_tracks`** - Soft-delete tracks by ID and remove from all playlists ⚠️ (Destructive)
 
 ### Database Management
 - **`connect_database`** - Explicitly connect with optional custom database path
