@@ -43,7 +43,7 @@ Three-layer design in `rekordbox_mcp/`:
 - Track search results default to limit=50, max=1000. The `get_genre_filepaths` tool returns only file paths for token efficiency.
 - Mutation tools (create_playlist, add_tracks_to_playlist, etc.) are annotated with `readOnlyHint=False`. Destructive tools (delete_playlist) have `destructiveHint=True`.
 - Smart playlists cannot be deleted (protected by validation).
-- Rekordbox must be closed when accessing the database.
+- Read-only tools work while rekordbox is open. Mutation tools require rekordbox to be closed — pyrekordbox's `commit()` blocks when it detects the running process.
 - An encryption key is required for database access; `setup-key.py` handles downloading/verifying it.
 
 ## Database Tables (via pyrekordbox)

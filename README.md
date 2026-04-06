@@ -44,7 +44,7 @@ A comprehensive Model Context Protocol (MCP) server for rekordbox database manag
 
 **BACKUP YOUR REKORDBOX LIBRARY BEFORE USE**
 
-This software directly accesses your rekordbox database for analysis and querying. While currently read-only, **always create a backup** of your entire rekordbox library before using this tool as a precautionary measure.
+This software directly accesses your rekordbox database. **Always create a backup** of your entire rekordbox library before using this tool as a precautionary measure.
 
 ### Backup Requirements
 
@@ -65,7 +65,8 @@ This software directly accesses your rekordbox database for analysis and queryin
 - Python 3.12+
 - rekordbox 6 or 7 installed with an existing library
 - **COMPLETE BACKUP** of your rekordbox library (see safety notice above)
-- **rekordbox must be completely closed** when using this tool
+- **Read-only tools** (search, stats, history) work while rekordbox is open
+- **Write tools** (create playlist, add tracks, cleanup) require **rekordbox to be closed** — pyrekordbox blocks commits when rekordbox is running
 - Access to your rekordbox database (automatic detection supported)
 
 ### Installation
