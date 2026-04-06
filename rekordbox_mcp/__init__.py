@@ -5,5 +5,5 @@ A Model Context Protocol server for rekordbox database management with real-time
 """
 
 __version__ = "1.0.0"
-__author__ = "Dave"
-__description__ = "MCP server for rekordbox database management"
+__author__ = "Dave Henke"
+__description__ = "MCP server for rekordbox database management with real-time database access"

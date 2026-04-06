@@ -106,25 +106,43 @@ Add to your Claude Desktop configuration:
 }
 ```
 
-## Available Tools
+## Available Tools (26 tools + 1 resource)
 
 ### Search & Discovery
 - **`search_tracks`** - Advanced multi-field track search with filtering (genre, key, BPM, artist, title, rating, etc.)
-- **`get_library_stats`** - Comprehensive library statistics and analytics
+- **`get_track_details`** - Get full metadata for a specific track by ID
+- **`get_tracks_by_key`** - Find tracks in a specific musical key (e.g., "5A", "12B")
+- **`get_tracks_by_bpm_range`** - Find tracks within a BPM range
+- **`get_genre_filepaths`** - Get filepaths for tracks matching a genre (token-efficient, returns only paths)
+- **`get_most_played_tracks`** - Get tracks ranked by play count
+- **`get_top_rated_tracks`** - Get tracks ranked by rating
+- **`get_unplayed_tracks`** - Get tracks with zero play count
+- **`get_track_file_path`** - Get the file system path for a specific track
+- **`search_tracks_by_filename`** - Search tracks by partial filename match
+
+### Library Analytics
+- **`get_library_stats`** - Comprehensive library statistics (track count, playtime, BPM, genres)
+- **`analyze_library`** - Custom grouping and aggregation (by genre, key, year, artist, or rating)
+- **`validate_track_ids`** - Verify a list of track IDs and report which are valid/invalid
 
 ### Playlist Operations
 - **`get_playlists`** - List all playlists including smart playlists
 - **`get_playlist_tracks`** - Get all tracks in a specific playlist
-- **`create_playlist`** - Create new playlists ⚠️ (Mutation)
+- **`create_playlist`** - Create new playlist or folder ⚠️ (Mutation)
 - **`add_track_to_playlist`** - Add single track to playlist ⚠️ (Mutation)
 - **`add_tracks_to_playlist`** - Add multiple tracks to playlist in one operation ⚠️ (Mutation)
 - **`remove_track_from_playlist`** - Remove track from playlist ⚠️ (Mutation)
 - **`delete_playlist`** - Delete playlist permanently ⚠️ (Destructive)
 
 ### DJ History & Analytics
-- **`get_recent_sessions`** - Access recent DJ session history and performance data
+- **`get_history_sessions`** - Get all DJ history sessions with metadata
 - **`get_session_tracks`** - Get all tracks played in a specific session
+- **`get_recent_sessions`** - Get sessions within a specified number of days
+- **`search_history_sessions`** - Search sessions by name, year, month, or minimum track count
 - **`get_history_stats`** - Comprehensive DJ performance statistics and insights
+
+### Database Management
+- **`connect_database`** - Explicitly connect with optional custom database path
 
 ### Resources
 - **`database-status`** - Current connection status and basic stats

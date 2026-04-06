@@ -1,15 +1,34 @@
 [project]
-name = "rekordbox-mcp-python"
+name = "rekordbox-mcp"
 version = "1.0.0"
 description = "MCP server for rekordbox database management with real-time database access"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
+authors = [
+    { name = "Dave Henke", email = "davehenke@users.noreply.github.com" },
+]
+keywords = ["mcp", "rekordbox", "dj", "music", "database", "model-context-protocol"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio",
+]
 dependencies = [
     "fastmcp>=2.11.0",
     "pyrekordbox>=0.4.3",
     "pydantic>=2.0.0",
     "loguru>=0.7.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/davehenke/rekordbox-mcp"
+Repository = "https://github.com/davehenke/rekordbox-mcp"
+Issues = "https://github.com/davehenke/rekordbox-mcp/issues"
 
 [project.optional-dependencies]
 dev = [
