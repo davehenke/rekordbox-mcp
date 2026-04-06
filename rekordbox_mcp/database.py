@@ -712,16 +712,17 @@ class RekordboxDatabase:
             logger.error(f"Failed to get history stats: {e}")
             return HistoryStats()
     
-    async def create_playlist(self, name: str, parent_id: Optional[str] = None) -> str:
+    async def create_playlist(self, name: str, parent_id: Optional[str] = None, is_folder: bool = False) -> str:
         """
-        Create a new playlist.
+        Create a new playlist or folder.
         
         Args:
-            name: Name for the new playlist
+            name: Name for the new playlist or folder
             parent_id: Optional parent folder ID
+            is_folder: If True, create as a folder (Attribute=1)
             
         Returns:
-            ID of the created playlist
+            ID of the created playlist or folder
         """
         if not self.db:
             raise RuntimeError("Database not connected")
@@ -730,18 +731,24 @@ class RekordboxDatabase:
             # Create backup before mutation
             await self._create_backup()
             
-            # Create playlist using pyrekordbox
-            playlist = self.db.create_playlist(
-                name=name,
-                parent=parent_id if parent_id and parent_id != "root" else None
-            )
+            # Convert parent_id to int if provided
+            parent_int_id = int(parent_id) if parent_id and parent_id != "root" else None
+            
+            # Create playlist or folder using appropriate pyrekordbox method
+            if is_folder:
+                playlist = self.db.create_playlist_folder(
+                    name=name,
+                    parent=parent_int_id
+                )
+            else:
+                playlist = self.db.create_playlist(
+                    name=name,
+                    parent=parent_int_id
+                )
             
             # Debug: check what type playlist is
             logger.debug(f"playlist type: {type(playlist)}")
             logger.debug(f"playlist value: {playlist}")
-            
-            # Commit changes
-            self.db.commit()
             
             # Handle different return types
             if hasattr(playlist, 'ID'):
@@ -752,7 +759,11 @@ class RekordboxDatabase:
                 # Try to get ID from the playlist object
                 playlist_id = str(playlist)
             
-            logger.info(f"Created playlist '{name}' with ID {playlist_id}")
+            # Commit changes
+            self.db.commit()
+            
+            item_type = "folder" if is_folder else "playlist"
+            logger.info(f"Created {item_type} '{name}' with ID {playlist_id}")
             return playlist_id
             
         except Exception as e:

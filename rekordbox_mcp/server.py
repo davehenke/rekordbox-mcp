@@ -532,19 +532,21 @@ async def search_history_sessions(
 )
 async def create_playlist(
     name: str,
-    parent_id: Optional[str] = None
+    parent_id: Optional[str] = None,
+    is_folder: bool = False
 ) -> Dict[str, Any]:
     """
-    Create a new playlist in rekordbox.
+    Create a new playlist or folder in rekordbox.
     
     ⚠️ CAUTION: This modifies your rekordbox database!
     
     Args:
-        name: Name for the new playlist
+        name: Name for the new playlist or folder
         parent_id: Optional parent folder ID (omit for root level)
+        is_folder: If True, create as a folder that can contain other playlists
         
     Returns:
-        Information about the created playlist
+        Information about the created playlist or folder
     """
     await ensure_database_connected()
     
@@ -552,12 +554,14 @@ async def create_playlist(
         raise ValueError("Playlist name cannot be empty")
     
     try:
-        playlist_id = await db.create_playlist(name.strip(), parent_id)
+        playlist_id = await db.create_playlist(name.strip(), parent_id, is_folder)
+        item_type = "folder" if is_folder else "playlist"
         return {
             "status": "success",
-            "message": f"Created playlist '{name}'",
+            "message": f"Created {item_type} '{name}'",
             "playlist_id": playlist_id,
-            "playlist_name": name
+            "playlist_name": name,
+            "is_folder": is_folder
         }
     except Exception as e:
         return {
