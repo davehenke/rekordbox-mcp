@@ -324,3 +324,172 @@ class TestRemoveTracksByIds:
         await database.remove_tracks_by_ids(["1"])
         # Should have called remove_from_playlist for track in playlist 100
         mock_db.remove_from_playlist.assert_called()
+
+
+class TestImportTrack:
+    """Tests for import_track / import_tracks."""
+
+    @staticmethod
+    def _wire_import_mocks(mock_db):
+        """Set up add_content/add_artist/add_genre/add_album/add_label/get_* on the mock."""
+        added = MagicMock()
+        added.ID = 4242
+
+        mock_db.add_content = MagicMock(return_value=added)
+        mock_db.rollback = MagicMock()
+
+        # Lookups always return empty (nothing exists yet)
+        empty = MagicMock()
+        empty.first = MagicMock(return_value=None)
+        empty.__iter__ = MagicMock(return_value=iter([]))
+        mock_db.get_artist = MagicMock(return_value=empty)
+        mock_db.get_album = MagicMock(return_value=empty)
+        mock_db.get_genre = MagicMock(return_value=empty)
+        mock_db.get_label = MagicMock(return_value=empty)
+
+        # Adders return a row with an ID
+        def make_row(rid):
+            row = MagicMock()
+            row.ID = rid
+            return row
+
+        mock_db.add_artist = MagicMock(return_value=make_row(111))
+        mock_db.add_album = MagicMock(return_value=make_row(222))
+        mock_db.add_genre = MagicMock(return_value=make_row(333))
+        mock_db.add_label = MagicMock(return_value=make_row(444))
+
+        return added
+
+    async def test_imports_single_file_with_explicit_metadata(self, database, mock_db, tmp_path):
+        audio = tmp_path / "track.mp3"
+        audio.write_bytes(b"fake audio")
+
+        self._wire_import_mocks(mock_db)
+
+        result = await database.import_track(
+            str(audio),
+            metadata={
+                "title": "Test Track",
+                "artist": "Test Artist",
+                "genre": "House",
+                "bpm": 128.0,
+                "rating": 4,
+            },
+            auto_tag=False,
+        )
+
+        assert result["status"] == "success"
+        assert result["track_id"] == "4242"
+        mock_db.add_content.assert_called_once()
+        _, kwargs = mock_db.add_content.call_args
+        assert kwargs["Title"] == "Test Track"
+        assert kwargs["ArtistID"] == 111
+        assert kwargs["GenreID"] == 333
+        assert kwargs["BPM"] == 12800  # 128.0 * 100
+        assert kwargs["Rating"] == 4
+        mock_db.add_artist.assert_called_once_with("Test Artist")
+        mock_db.add_genre.assert_called_once_with("House")
+        mock_db.commit.assert_called()
+
+    async def test_rejects_missing_file(self, database, mock_db, tmp_path):
+        self._wire_import_mocks(mock_db)
+        result = await database.import_track(str(tmp_path / "nope.mp3"), auto_tag=False)
+        assert result["status"] == "error"
+        assert "not found" in result["reason"]
+        mock_db.add_content.assert_not_called()
+
+    async def test_rejects_unsupported_extension(self, database, mock_db, tmp_path):
+        self._wire_import_mocks(mock_db)
+        weird = tmp_path / "weird.xyz"
+        weird.write_bytes(b"x")
+        result = await database.import_track(str(weird), auto_tag=False)
+        assert result["status"] == "error"
+        assert "unsupported" in result["reason"]
+
+    async def test_duplicate_is_skipped(self, database, mock_db, tmp_path):
+        self._wire_import_mocks(mock_db)
+        mock_db.add_content = MagicMock(
+            side_effect=ValueError("Track with path '/x' already exists in database")
+        )
+        audio = tmp_path / "dup.mp3"
+        audio.write_bytes(b"x")
+        result = await database.import_track(str(audio), auto_tag=False)
+        assert result["status"] == "skipped"
+        assert "already" in result["reason"].lower()
+
+    async def test_reuses_existing_artist(self, database, mock_db, tmp_path):
+        audio = tmp_path / "r.mp3"
+        audio.write_bytes(b"x")
+        added = self._wire_import_mocks(mock_db)
+
+        existing_artist = MagicMock()
+        existing_artist.ID = 999
+        existing_result = MagicMock()
+        existing_result.first = MagicMock(return_value=existing_artist)
+        mock_db.get_artist = MagicMock(return_value=existing_result)
+
+        result = await database.import_track(
+            str(audio),
+            metadata={"artist": "DJ Alpha"},
+            auto_tag=False,
+        )
+
+        assert result["status"] == "success"
+        mock_db.add_artist.assert_not_called()
+        _, kwargs = mock_db.add_content.call_args
+        assert kwargs["ArtistID"] == 999
+
+    async def test_batch_scans_directory(self, database, mock_db, tmp_path):
+        self._wire_import_mocks(mock_db)
+        (tmp_path / "a.mp3").write_bytes(b"x")
+        (tmp_path / "b.flac").write_bytes(b"x")
+        (tmp_path / "readme.txt").write_text("nope")
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "c.mp3").write_bytes(b"x")
+
+        # Each add_content call returns a row with a different ID
+        ids = iter([1, 2, 3, 4])
+
+        def fake_add_content(path, **_kwargs):
+            r = MagicMock()
+            r.ID = next(ids)
+            return r
+
+        mock_db.add_content = MagicMock(side_effect=fake_add_content)
+
+        result = await database.import_tracks([str(tmp_path)], recursive=True, auto_tag=False)
+
+        assert result["summary"]["scanned"] == 3
+        assert result["summary"]["imported"] == 3
+        assert result["summary"]["failed"] == 0
+        assert mock_db.add_content.call_count == 3
+
+    async def test_batch_extension_filter(self, database, mock_db, tmp_path):
+        self._wire_import_mocks(mock_db)
+        (tmp_path / "a.mp3").write_bytes(b"x")
+        (tmp_path / "b.flac").write_bytes(b"x")
+
+        result = await database.import_tracks(
+            [str(tmp_path)],
+            recursive=False,
+            auto_tag=False,
+            extensions=["mp3"],
+        )
+
+        assert result["summary"]["scanned"] == 1
+        assert result["summary"]["imported"] == 1
+
+    async def test_batch_deduplicates_paths(self, database, mock_db, tmp_path):
+        self._wire_import_mocks(mock_db)
+        audio = tmp_path / "a.mp3"
+        audio.write_bytes(b"x")
+
+        result = await database.import_tracks(
+            [str(audio), str(audio), str(tmp_path)],
+            recursive=False,
+            auto_tag=False,
+        )
+
+        # Same file referenced three ways should be imported once
+        assert result["summary"]["scanned"] == 1

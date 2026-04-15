@@ -23,6 +23,7 @@ dependencies = [
     "pyrekordbox>=0.4.3",
     "pydantic>=2.0.0",
     "loguru>=0.7.0",
+    "mutagen>=1.47.0",
 ]
 
 [project.urls]
