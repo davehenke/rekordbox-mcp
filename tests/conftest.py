@@ -59,6 +59,27 @@ class MockPlaylistSong:
 
 
 @dataclass
+class MockMyTag:
+    ID: str
+    Name: str = ""
+    Attribute: int = 0  # 1 = category, 0 = selectable tag
+    ParentID: str = "root"
+    Seq: Optional[int] = None
+    UUID: str = ""
+    rb_local_deleted: int = 0
+
+
+@dataclass
+class MockSongMyTag:
+    ID: str = ""
+    MyTagID: str = ""
+    ContentID: str = ""
+    TrackNo: Optional[int] = None
+    UUID: str = ""
+    rb_local_deleted: int = 0
+
+
+@dataclass
 class MockHistory:
     ID: int
     Name: str = ""
@@ -160,6 +181,32 @@ def mock_playlist_songs():
 
 
 @pytest.fixture
+def mock_my_tags():
+    """Two categories with tags, plus one soft-deleted and one orphan tag."""
+    return [
+        MockMyTag(ID="1", Name="STYLE", Attribute=1, ParentID="root", Seq=1, UUID="1"),
+        MockMyTag(ID="5", Name="VIBE", Attribute=1, ParentID="root", Seq=2, UUID="5"),
+        MockMyTag(ID="1001", Name="House", Attribute=0, ParentID="1", Seq=1, UUID="u1001"),
+        MockMyTag(ID="1002", Name="Techno", Attribute=0, ParentID="1", Seq=2, UUID="u1002"),
+        MockMyTag(ID="1003", Name="Dark", Attribute=0, ParentID="5", Seq=1, UUID="u1003"),
+        MockMyTag(ID="1004", Name="Orphaned", Attribute=0, ParentID="99", Seq=1, UUID="u1004"),  # parent 99 missing
+        MockMyTag(ID="1099", Name="Deleted Tag", Attribute=0, ParentID="1", Seq=9, UUID="u1099", rb_local_deleted=1),
+    ]
+
+
+@pytest.fixture
+def mock_song_my_tags():
+    """Track↔tag assignments referencing mock_content_list IDs."""
+    return [
+        MockSongMyTag(ID="s1", MyTagID="1001", ContentID="1", TrackNo=1),
+        MockSongMyTag(ID="s2", MyTagID="1001", ContentID="5", TrackNo=2),
+        MockSongMyTag(ID="s3", MyTagID="1002", ContentID="2", TrackNo=1),
+        MockSongMyTag(ID="s4", MyTagID="1003", ContentID="1", TrackNo=1),
+        MockSongMyTag(ID="s5", MyTagID="1001", ContentID="9", TrackNo=3, rb_local_deleted=1),  # ignored
+    ]
+
+
+@pytest.fixture
 def mock_histories():
     return [
         MockHistory(ID=200, Name="2024", Attribute=1, DateCreated="2024-01-01"),  # folder
@@ -180,7 +227,8 @@ def mock_history_songs():
 
 
 @pytest.fixture
-def mock_db(mock_content_list, mock_playlists, mock_playlist_songs, mock_histories, mock_history_songs):
+def mock_db(mock_content_list, mock_playlists, mock_playlist_songs, mock_histories,
+            mock_history_songs, mock_my_tags, mock_song_my_tags):
     """A MagicMock of Rekordbox6Database wired with test data."""
     db = MagicMock()
 
@@ -218,6 +266,29 @@ def mock_db(mock_content_list, mock_playlists, mock_playlist_songs, mock_histori
     db.create_playlist = MagicMock(return_value=MockPlaylist(ID=500, Name="New Playlist"))
     db.create_playlist_folder = MagicMock(return_value=MockPlaylist(ID=501, Name="New Folder"))
     db.delete_playlist = MagicMock()
+
+    # My Tags
+    def get_my_tag_side_effect(**kwargs):
+        if "ID" in kwargs:
+            wanted = str(kwargs["ID"])
+            return next((t for t in mock_my_tags if str(t.ID) == wanted), None)
+        return list(mock_my_tags)
+
+    db.get_my_tag = MagicMock(side_effect=get_my_tag_side_effect)
+
+    def get_my_tag_songs_side_effect(**kwargs):
+        rows = mock_song_my_tags
+        if "ContentID" in kwargs:
+            rows = [s for s in rows if str(s.ContentID) == str(kwargs["ContentID"])]
+        if "MyTagID" in kwargs:
+            rows = [s for s in rows if str(s.MyTagID) == str(kwargs["MyTagID"])]
+        return list(rows)
+
+    db.get_my_tag_songs = MagicMock(side_effect=get_my_tag_songs_side_effect)
+    db.generate_unused_id = MagicMock(return_value=987654321)
+    db.add = MagicMock()
+    db.delete = MagicMock()
+    db.rollback = MagicMock()
     db.commit = MagicMock()
     db.close = MagicMock()
 

@@ -12,12 +12,15 @@ import shutil
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from uuid import uuid4
 
 from pyrekordbox import Rekordbox6Database
+from pyrekordbox.db6 import tables as rb_tables
 from loguru import logger
 
 from .models import (
     Track,
+    MyTag,
     Playlist,
     SearchOptions,
     HistorySession,
@@ -1312,6 +1315,471 @@ class RekordboxDatabase:
             if self.db and hasattr(self.db, "rollback"):
                 self.db.rollback()
             raise RuntimeError(f"Failed to remove tracks: {str(e)}")
+
+    # --- My Tag operations ---
+
+    def _resolve_my_tag_row(
+        self, my_tag_id: Optional[str] = None, my_tag_name: Optional[str] = None
+    ):
+        """Resolve a My Tag row by ID (preferred) or case-insensitive name."""
+        if my_tag_id is not None:
+            row = self.db.get_my_tag(ID=str(my_tag_id))
+            # get_my_tag(ID=pk) returns a single row (or None) when the PK matches;
+            # a no-match returns a Query, which has no ``Name`` attribute.
+            if row is not None and hasattr(row, "Name"):
+                return row
+        if my_tag_name:
+            wanted = my_tag_name.strip().lower()
+            for r in self.db.get_my_tag():
+                if getattr(r, "rb_local_deleted", 0):
+                    continue
+                if (r.Name or "").lower() == wanted:
+                    return r
+        return None
+
+    def _my_tag_usage_counts(self) -> Dict[str, int]:
+        """Count active track assignments per My Tag ID."""
+        counts: Dict[str, int] = {}
+        for s in self.db.get_my_tag_songs():
+            if getattr(s, "rb_local_deleted", 0):
+                continue
+            mid = str(s.MyTagID)
+            counts[mid] = counts.get(mid, 0) + 1
+        return counts
+
+    async def get_my_tags(self) -> Dict[str, Any]:
+        """Return the My Tag tree (categories -> tags) with per-tag track counts."""
+        if not self.db:
+            raise RuntimeError("Database not connected")
+
+        def _inner():
+            rows = [
+                r
+                for r in self.db.get_my_tag()
+                if getattr(r, "rb_local_deleted", 0) == 0
+            ]
+            counts = self._my_tag_usage_counts()
+
+            categories = [r for r in rows if getattr(r, "Attribute", 0) == 1]
+            leaves = [r for r in rows if getattr(r, "Attribute", 0) == 0]
+            category_ids = {str(c.ID) for c in categories}
+
+            leaves_by_parent: Dict[str, list] = {}
+            for lf in leaves:
+                leaves_by_parent.setdefault(str(lf.ParentID), []).append(lf)
+
+            tree = []
+            for c in sorted(categories, key=lambda x: (x.Seq or 0)):
+                kids = sorted(
+                    leaves_by_parent.get(str(c.ID), []),
+                    key=lambda x: (x.Seq or 0, x.Name or ""),
+                )
+                tree.append(
+                    {
+                        "id": str(c.ID),
+                        "name": c.Name or "",
+                        "seq": c.Seq,
+                        "tag_count": len(kids),
+                        "tags": [
+                            {
+                                "id": str(k.ID),
+                                "name": k.Name or "",
+                                "track_count": counts.get(str(k.ID), 0),
+                            }
+                            for k in kids
+                        ],
+                    }
+                )
+
+            orphan_leaves = [
+                lf for lf in leaves if str(lf.ParentID) not in category_ids
+            ]
+
+            return {
+                "categories": tree,
+                "orphan_tags": [
+                    {
+                        "id": str(k.ID),
+                        "name": k.Name or "",
+                        "parent_id": str(k.ParentID),
+                        "track_count": counts.get(str(k.ID), 0),
+                    }
+                    for k in orphan_leaves
+                ],
+                "summary": {
+                    "category_count": len(categories),
+                    "tag_count": len(leaves),
+                    "total_assignments": sum(counts.values()),
+                },
+            }
+
+        return await asyncio.to_thread(_inner)
+
+    async def get_track_my_tags(self, track_id: str) -> List[MyTag]:
+        """Get all My Tags assigned to a specific track."""
+        if not self.db:
+            raise RuntimeError("Database not connected")
+
+        def _inner():
+            songs = [
+                s
+                for s in self.db.get_my_tag_songs(ContentID=str(track_id))
+                if getattr(s, "rb_local_deleted", 0) == 0
+            ]
+            all_tags = {str(r.ID): r for r in self.db.get_my_tag()}
+
+            result: List[MyTag] = []
+            for s in songs:
+                tag = all_tags.get(str(s.MyTagID))
+                if tag is None or getattr(tag, "rb_local_deleted", 0) != 0:
+                    continue
+                cat = all_tags.get(str(tag.ParentID))
+                result.append(
+                    MyTag(
+                        id=str(tag.ID),
+                        name=tag.Name or "",
+                        is_category=getattr(tag, "Attribute", 0) == 1,
+                        category=cat.Name if cat is not None else None,
+                        category_id=(
+                            str(tag.ParentID)
+                            if tag.ParentID and tag.ParentID != "root"
+                            else None
+                        ),
+                    )
+                )
+            return result
+
+        return await asyncio.to_thread(_inner)
+
+    async def get_tracks_by_my_tag(
+        self, my_tag_id: Optional[str] = None, my_tag_name: Optional[str] = None
+    ) -> List[Track]:
+        """Get all tracks that carry a specific My Tag (by ID or name)."""
+        if not self.db:
+            raise RuntimeError("Database not connected")
+
+        def _inner():
+            tag = self._resolve_my_tag_row(my_tag_id, my_tag_name)
+            if tag is None:
+                return []
+
+            songs = [
+                s
+                for s in self.db.get_my_tag_songs(MyTagID=str(tag.ID))
+                if getattr(s, "rb_local_deleted", 0) == 0
+            ]
+            active = self._get_active_content()
+            lookup = {str(c.ID): c for c in active}
+
+            tracks = []
+            for s in songs:
+                content = lookup.get(str(s.ContentID))
+                if content is not None:
+                    tracks.append(self._content_to_track(content))
+            return tracks
+
+        return await asyncio.to_thread(_inner)
+
+    async def add_my_tag_to_tracks(
+        self,
+        track_ids: List[str],
+        my_tag_id: Optional[str] = None,
+        my_tag_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Assign a My Tag to one or more tracks. Skips tracks already carrying it."""
+        if not self.db:
+            raise RuntimeError("Database not connected")
+
+        def _inner():
+            self._create_backup()
+
+            tag = self._resolve_my_tag_row(my_tag_id, my_tag_name)
+            if tag is None:
+                raise ValueError("My Tag not found")
+            if getattr(tag, "Attribute", 0) == 1:
+                raise ValueError(
+                    f"'{tag.Name}' is a category, not a tag — pick a tag under it"
+                )
+
+            tag_pk = str(tag.ID)
+            existing_songs = list(self.db.get_my_tag_songs(MyTagID=tag_pk))
+            tagged_content = {
+                str(s.ContentID)
+                for s in existing_songs
+                if getattr(s, "rb_local_deleted", 0) == 0
+            }
+            next_no = len(existing_songs) + 1
+            now = datetime.now()
+
+            added: List[str] = []
+            skipped: List[str] = []
+            failed: List[Dict[str, str]] = []
+
+            for tid in track_ids:
+                try:
+                    content = self.db.get_content(ID=int(tid))
+                    if not content or getattr(content, "rb_local_deleted", 0) != 0:
+                        failed.append({"track_id": tid, "reason": "track not found"})
+                        continue
+                    if str(tid) in tagged_content:
+                        skipped.append(tid)
+                        continue
+
+                    row = rb_tables.DjmdSongMyTag.create(
+                        ID=str(uuid4()),
+                        MyTagID=tag_pk,
+                        ContentID=str(tid),
+                        TrackNo=next_no,
+                        UUID=str(uuid4()),
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    self.db.add(row)
+                    tagged_content.add(str(tid))
+                    next_no += 1
+                    added.append(tid)
+                except Exception as e:
+                    failed.append({"track_id": tid, "reason": str(e)})
+
+            self.db.commit()
+            self._invalidate_content_cache()
+
+            logger.info(
+                f"My Tag '{tag.Name}': {len(added)} added, "
+                f"{len(skipped)} skipped, {len(failed)} failed"
+            )
+            return {
+                "my_tag_id": tag_pk,
+                "tag_name": tag.Name or "",
+                "added": added,
+                "skipped": skipped,
+                "failed": failed,
+            }
+
+        try:
+            return await asyncio.to_thread(_inner)
+        except Exception as e:
+            logger.error(f"Failed to add My Tag to tracks: {e}")
+            if self.db and hasattr(self.db, "rollback"):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to add My Tag to tracks: {str(e)}")
+
+    async def remove_my_tag_from_tracks(
+        self,
+        track_ids: List[str],
+        my_tag_id: Optional[str] = None,
+        my_tag_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Remove a My Tag from one or more tracks (soft-delete the assignment)."""
+        if not self.db:
+            raise RuntimeError("Database not connected")
+
+        def _inner():
+            self._create_backup()
+
+            tag = self._resolve_my_tag_row(my_tag_id, my_tag_name)
+            if tag is None:
+                raise ValueError("My Tag not found")
+            tag_pk = str(tag.ID)
+
+            removed: List[str] = []
+            not_found: List[str] = []
+
+            for tid in track_ids:
+                songs = [
+                    s
+                    for s in self.db.get_my_tag_songs(ContentID=str(tid))
+                    if str(s.MyTagID) == tag_pk
+                    and getattr(s, "rb_local_deleted", 0) == 0
+                ]
+                if not songs:
+                    not_found.append(tid)
+                    continue
+                for s in songs:
+                    s.rb_local_deleted = 1
+                removed.append(tid)
+
+            self.db.commit()
+            self._invalidate_content_cache()
+
+            logger.info(
+                f"My Tag '{tag.Name}': removed from {len(removed)} tracks, "
+                f"{len(not_found)} not carrying it"
+            )
+            return {
+                "my_tag_id": tag_pk,
+                "tag_name": tag.Name or "",
+                "removed": removed,
+                "not_found": not_found,
+            }
+
+        try:
+            return await asyncio.to_thread(_inner)
+        except Exception as e:
+            logger.error(f"Failed to remove My Tag from tracks: {e}")
+            if self.db and hasattr(self.db, "rollback"):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to remove My Tag from tracks: {str(e)}")
+
+    async def create_my_tag_category(self, name: str) -> Dict[str, Any]:
+        """Create a new My Tag category (a column in the My Tag panel)."""
+        if not self.db:
+            raise RuntimeError("Database not connected")
+
+        def _inner():
+            self._create_backup()
+
+            categories = [
+                r
+                for r in self.db.get_my_tag()
+                if getattr(r, "Attribute", 0) == 1
+                and getattr(r, "rb_local_deleted", 0) == 0
+            ]
+            next_seq = max((c.Seq or 0 for c in categories), default=0) + 1
+            new_id = str(
+                self.db.generate_unused_id(rb_tables.DjmdMyTag, is_28_bit=False)
+            )
+            now = datetime.now()
+
+            row = rb_tables.DjmdMyTag.create(
+                ID=new_id,
+                Seq=next_seq,
+                Name=name,
+                Attribute=1,
+                ParentID="root",
+                UUID=str(uuid4()),
+                created_at=now,
+                updated_at=now,
+            )
+            self.db.add(row)
+            self.db.commit()
+
+            logger.info(f"Created My Tag category '{name}' (ID {new_id})")
+            return {"id": new_id, "name": name, "seq": next_seq}
+
+        try:
+            return await asyncio.to_thread(_inner)
+        except Exception as e:
+            logger.error(f"Failed to create My Tag category '{name}': {e}")
+            if self.db and hasattr(self.db, "rollback"):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to create My Tag category: {str(e)}")
+
+    async def create_my_tag(
+        self,
+        name: str,
+        category_id: Optional[str] = None,
+        category_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a new selectable My Tag under an existing category."""
+        if not self.db:
+            raise RuntimeError("Database not connected")
+
+        def _inner():
+            self._create_backup()
+
+            category = self._resolve_my_tag_row(category_id, category_name)
+            if category is None or getattr(category, "Attribute", 0) != 1:
+                raise ValueError("Parent category not found")
+            cat_pk = str(category.ID)
+
+            siblings = [
+                r
+                for r in self.db.get_my_tag()
+                if str(r.ParentID) == cat_pk and getattr(r, "rb_local_deleted", 0) == 0
+            ]
+            next_seq = max((s.Seq or 0 for s in siblings), default=0) + 1
+            new_id = str(
+                self.db.generate_unused_id(rb_tables.DjmdMyTag, is_28_bit=False)
+            )
+            now = datetime.now()
+
+            row = rb_tables.DjmdMyTag.create(
+                ID=new_id,
+                Seq=next_seq,
+                Name=name,
+                Attribute=0,
+                ParentID=cat_pk,
+                UUID=str(uuid4()),
+                created_at=now,
+                updated_at=now,
+            )
+            self.db.add(row)
+            self.db.commit()
+
+            logger.info(
+                f"Created My Tag '{name}' (ID {new_id}) under "
+                f"category '{category.Name}'"
+            )
+            return {
+                "id": new_id,
+                "name": name,
+                "category_id": cat_pk,
+                "category_name": category.Name or "",
+                "seq": next_seq,
+            }
+
+        try:
+            return await asyncio.to_thread(_inner)
+        except Exception as e:
+            logger.error(f"Failed to create My Tag '{name}': {e}")
+            if self.db and hasattr(self.db, "rollback"):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to create My Tag: {str(e)}")
+
+    async def delete_my_tag(
+        self, my_tag_id: Optional[str] = None, my_tag_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Soft-delete a My Tag (or a whole category and its tags) and its assignments."""
+        if not self.db:
+            raise RuntimeError("Database not connected")
+
+        def _inner():
+            self._create_backup()
+
+            tag = self._resolve_my_tag_row(my_tag_id, my_tag_name)
+            if tag is None:
+                raise ValueError("My Tag not found")
+
+            to_delete = [tag]
+            if getattr(tag, "Attribute", 0) == 1:
+                to_delete += [
+                    r
+                    for r in self.db.get_my_tag()
+                    if str(r.ParentID) == str(tag.ID)
+                    and getattr(r, "rb_local_deleted", 0) == 0
+                ]
+
+            assignments_removed = 0
+            for t in to_delete:
+                for s in self.db.get_my_tag_songs(MyTagID=str(t.ID)):
+                    if getattr(s, "rb_local_deleted", 0) == 0:
+                        s.rb_local_deleted = 1
+                        assignments_removed += 1
+                t.rb_local_deleted = 1
+
+            self.db.commit()
+            self._invalidate_content_cache()
+
+            logger.info(
+                f"Deleted My Tag '{tag.Name}' "
+                f"({len(to_delete)} tag(s), {assignments_removed} assignment(s))"
+            )
+            return {
+                "deleted_id": str(tag.ID),
+                "name": tag.Name or "",
+                "is_category": getattr(tag, "Attribute", 0) == 1,
+                "tags_deleted": len(to_delete),
+                "assignments_removed": assignments_removed,
+            }
+
+        try:
+            return await asyncio.to_thread(_inner)
+        except Exception as e:
+            logger.error(f"Failed to delete My Tag: {e}")
+            if self.db and hasattr(self.db, "rollback"):
+                self.db.rollback()
+            raise RuntimeError(f"Failed to delete My Tag: {str(e)}")
 
     # --- Field mapping ---
 
