@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-An MCP server that provides Claude with direct read/write access to the rekordbox DJ software database. Built with FastMCP and pyrekordbox, it connects to rekordbox's encrypted SQLite (SQLCipher) database to expose 31 tools and 1 resource for searching tracks, importing new audio files, managing playlists, analyzing DJ history, and computing library statistics.
+An MCP server that provides Claude with direct read/write access to the rekordbox DJ software database. Built with FastMCP and pyrekordbox, it connects to rekordbox's encrypted SQLite (SQLCipher) database to expose 39 tools and 1 resource for searching tracks, importing new audio files, managing playlists and My Tags, analyzing DJ history, and computing library statistics.
 
 ## Commands
 
@@ -29,7 +29,7 @@ uv run pytest tests/ -v
 
 Three-layer design in `rekordbox_mcp/`:
 
-- **`server.py`** -- FastMCP server. Defines all MCP tools as decorated async functions, manages a global `RekordboxDatabase` instance, handles signals (SIGINT/SIGTERM). Entry point is `main()`. Tools are grouped: search/discovery, playlist operations, track import, DJ history, library analytics, cleanup, and database management.
+- **`server.py`** -- FastMCP server. Defines all MCP tools as decorated async functions, manages a global `RekordboxDatabase` instance, handles signals (SIGINT/SIGTERM). Entry point is `main()`. Tools are grouped: search/discovery, playlist operations, My Tag operations, track import, DJ history, library analytics, cleanup, and database management.
 
 - **`database.py`** -- `RekordboxDatabase` class. Wraps pyrekordbox's `Rekordbox6Database` for encrypted SQLite access. Auto-detects the database path per platform (`~/Library/Pioneer` on macOS, `~/AppData/Roaming/Pioneer` on Windows). Lazy connection on first tool call. All queries filter soft-deleted records (`rb_local_deleted`). Mutation methods auto-create timestamped backups (`master_backup_YYYYMMDD_HHMMSS.db`) before writes.
 
@@ -50,3 +50,5 @@ Three-layer design in `rekordbox_mcp/`:
 ## Database Tables (via pyrekordbox)
 
 `Content` (tracks), `Playlist`, `PlaylistSong` (playlist-track join), `History` (DJ sessions), `HistorySong` (history-track join). Playlist folders use `Attribute=1`.
+
+My Tags use two tables: `djmdMyTag` (definitions — a self-referential tree where categories have `Attribute=1` + `ParentID="root"` and selectable tags have `Attribute=0` + `ParentID=<category id>`) and `djmdSongMyTag` (track↔tag join: `MyTagID`, `ContentID`). Assignments and tags are soft-deleted via `rb_local_deleted=1`, matching rekordbox's own behavior. New `djmdMyTag` IDs are 32-bit (`generate_unused_id(..., is_28_bit=False)`); `djmdSongMyTag` IDs are UUID strings. As with all mutations, `db.commit()` auto-increments the USN so rekordbox sees the change.

@@ -49,6 +49,32 @@ class Track(BaseModel):
         return f"{minutes}:{seconds:02d}"
 
 
+class MyTag(BaseModel):
+    """
+    Rekordbox "My Tag" — an entry in the My Tag panel.
+
+    A My Tag is either a *category* (a column in the My Tag panel, e.g. "Genre",
+    "Situation") or a selectable *tag* nested under a category. Categories have
+    ``is_category=True``; selectable tags carry a ``category``/``category_id``
+    pointing at their parent.
+    """
+
+    id: str = Field(..., description="Unique My Tag identifier")
+    name: str = Field(..., description="My Tag or category name")
+    is_category: bool = Field(
+        False, description="True if this is a category (panel column), not a tag"
+    )
+    category: Optional[str] = Field(
+        None, description="Parent category name (None for categories)"
+    )
+    category_id: Optional[str] = Field(
+        None, description="Parent category ID (None for categories)"
+    )
+    track_count: Optional[int] = Field(
+        None, description="Number of tracks carrying this tag (tags only)"
+    )
+
+
 class Playlist(BaseModel):
     """
     Rekordbox playlist model.

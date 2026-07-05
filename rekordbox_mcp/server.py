@@ -512,6 +512,288 @@ async def search_history_sessions(
     return [session.model_dump() for session in filtered_sessions[:limit]]
 
 
+# My Tag Tools
+
+
+@mcp.tool()
+async def get_my_tags() -> Dict[str, Any]:
+    """
+    Get the full My Tag tree from rekordbox.
+
+    My Tags are rekordbox's tagging system (the "My Tag" panel): categories
+    (columns like Genre/Components/Situation) each containing selectable tags.
+
+    Returns:
+        Categories with their nested tags and per-tag track counts, any orphan
+        tags whose category was deleted, and a summary with totals.
+    """
+    await ensure_database_connected()
+
+    return await db.get_my_tags()
+
+
+@mcp.tool()
+async def get_track_my_tags(track_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all My Tags assigned to a specific track.
+
+    Args:
+        track_id: The unique track identifier
+
+    Returns:
+        List of My Tags on the track, each with its parent category
+    """
+    await ensure_database_connected()
+
+    tags = await db.get_track_my_tags(track_id)
+    return [tag.model_dump() for tag in tags]
+
+
+@mcp.tool()
+async def get_tracks_by_my_tag(
+    my_tag_id: Optional[str] = None, my_tag_name: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Get all tracks that carry a specific My Tag.
+
+    Provide either my_tag_id or my_tag_name (id wins if both are given).
+    Use get_my_tags to discover available tag ids and names.
+
+    Args:
+        my_tag_id: ID of the My Tag
+        my_tag_name: Name of the My Tag (case-insensitive), alternative to id
+
+    Returns:
+        List of tracks carrying the tag
+    """
+    await ensure_database_connected()
+
+    if not my_tag_id and not my_tag_name:
+        raise ValueError("Provide either my_tag_id or my_tag_name")
+
+    tracks = await db.get_tracks_by_my_tag(my_tag_id, my_tag_name)
+    return [track.model_dump() for track in tracks]
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+    }
+)
+async def add_my_tag_to_tracks(
+    track_ids: List[str],
+    my_tag_id: Optional[str] = None,
+    my_tag_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Assign a My Tag to one or more tracks.
+
+    ⚠️ CAUTION: This modifies your rekordbox database — rekordbox must be closed.
+    A backup is created automatically. Tracks already carrying the tag are skipped.
+
+    Provide either my_tag_id or my_tag_name. Use get_my_tags to find tag ids.
+
+    Args:
+        track_ids: List of track IDs to tag
+        my_tag_id: ID of the My Tag to assign
+        my_tag_name: Name of the My Tag (case-insensitive), alternative to id
+
+    Returns:
+        Summary with tracks added / skipped / failed
+    """
+    await ensure_database_connected()
+
+    if not my_tag_id and not my_tag_name:
+        return {"status": "error", "message": "Provide either my_tag_id or my_tag_name"}
+
+    try:
+        result = await db.add_my_tag_to_tracks(track_ids, my_tag_id, my_tag_name)
+        return {
+            "status": "success",
+            "message": (
+                f"My Tag '{result['tag_name']}': {len(result['added'])} added, "
+                f"{len(result['skipped'])} skipped, {len(result['failed'])} failed"
+            ),
+            "details": result,
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to add My Tag: {str(e)}"}
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+    }
+)
+async def remove_my_tag_from_tracks(
+    track_ids: List[str],
+    my_tag_id: Optional[str] = None,
+    my_tag_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Remove a My Tag from one or more tracks.
+
+    ⚠️ CAUTION: This modifies your rekordbox database — rekordbox must be closed.
+    A backup is created automatically.
+
+    Args:
+        track_ids: List of track IDs to untag
+        my_tag_id: ID of the My Tag to remove
+        my_tag_name: Name of the My Tag (case-insensitive), alternative to id
+
+    Returns:
+        Summary with tracks the tag was removed from and those not carrying it
+    """
+    await ensure_database_connected()
+
+    if not my_tag_id and not my_tag_name:
+        return {"status": "error", "message": "Provide either my_tag_id or my_tag_name"}
+
+    try:
+        result = await db.remove_my_tag_from_tracks(track_ids, my_tag_id, my_tag_name)
+        return {
+            "status": "success",
+            "message": (
+                f"My Tag '{result['tag_name']}': removed from "
+                f"{len(result['removed'])} tracks, "
+                f"{len(result['not_found'])} not carrying it"
+            ),
+            "details": result,
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to remove My Tag: {str(e)}"}
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+    }
+)
+async def create_my_tag_category(name: str) -> Dict[str, Any]:
+    """
+    Create a new My Tag category (a column in the My Tag panel).
+
+    ⚠️ CAUTION: This modifies your rekordbox database — rekordbox must be closed.
+    A backup is created automatically.
+
+    Args:
+        name: Name for the new category
+
+    Returns:
+        Information about the created category
+    """
+    await ensure_database_connected()
+
+    if not name.strip():
+        raise ValueError("Category name cannot be empty")
+
+    try:
+        result = await db.create_my_tag_category(name.strip())
+        return {
+            "status": "success",
+            "message": f"Created My Tag category '{name}'",
+            "category": result,
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to create category: {str(e)}"}
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+    }
+)
+async def create_my_tag(
+    name: str,
+    category_id: Optional[str] = None,
+    category_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Create a new selectable My Tag under an existing category.
+
+    ⚠️ CAUTION: This modifies your rekordbox database — rekordbox must be closed.
+    A backup is created automatically.
+
+    Provide the parent category by category_id or category_name.
+
+    Args:
+        name: Name for the new tag
+        category_id: ID of the parent category
+        category_name: Name of the parent category, alternative to category_id
+
+    Returns:
+        Information about the created tag
+    """
+    await ensure_database_connected()
+
+    if not name.strip():
+        raise ValueError("Tag name cannot be empty")
+    if not category_id and not category_name:
+        return {
+            "status": "error",
+            "message": "Provide either category_id or category_name",
+        }
+
+    try:
+        result = await db.create_my_tag(name.strip(), category_id, category_name)
+        return {
+            "status": "success",
+            "message": f"Created My Tag '{name}' under '{result['category_name']}'",
+            "tag": result,
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to create My Tag: {str(e)}"}
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True}
+)
+async def delete_my_tag(
+    my_tag_id: Optional[str] = None, my_tag_name: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Delete a My Tag, or a whole category and the tags inside it.
+
+    ⚠️ DANGER: This removes a My Tag (and its track assignments) from rekordbox!
+    Deleting a category also deletes every tag nested under it. Entries are
+    soft-deleted (rekordbox's own delete behavior). A backup is created automatically.
+
+    Args:
+        my_tag_id: ID of the My Tag or category to delete
+        my_tag_name: Name of the My Tag or category, alternative to id
+
+    Returns:
+        Details of what was deleted
+    """
+    await ensure_database_connected()
+
+    if not my_tag_id and not my_tag_name:
+        return {"status": "error", "message": "Provide either my_tag_id or my_tag_name"}
+
+    try:
+        result = await db.delete_my_tag(my_tag_id, my_tag_name)
+        kind = "category" if result["is_category"] else "tag"
+        return {
+            "status": "success",
+            "message": (
+                f"Deleted My Tag {kind} '{result['name']}' "
+                f"({result['tags_deleted']} tag(s), "
+                f"{result['assignments_removed']} assignment(s) removed)"
+            ),
+            "details": result,
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to delete My Tag: {str(e)}"}
+
+
 # Playlist Mutation Tools (with safety annotations)
 
 

@@ -107,7 +107,7 @@ Add to your Claude Desktop configuration:
 }
 ```
 
-## Available Tools (31 tools + 1 resource)
+## Available Tools (39 tools + 1 resource)
 
 ### Search & Discovery
 - **`search_tracks`** - Advanced multi-field track search with filtering (genre, key, BPM, artist, title, rating, etc.)
@@ -134,6 +134,20 @@ Add to your Claude Desktop configuration:
 - **`add_tracks_to_playlist`** - Add multiple tracks to playlist in one operation ⚠️ (Mutation)
 - **`remove_track_from_playlist`** - Remove track from playlist ⚠️ (Mutation)
 - **`delete_playlist`** - Delete playlist permanently ⚠️ (Destructive)
+
+### My Tag Operations
+- **`get_my_tags`** - Get the full My Tag tree (categories → tags) with per-tag track counts
+- **`get_track_my_tags`** - Get all My Tags assigned to a specific track
+- **`get_tracks_by_my_tag`** - Find all tracks carrying a My Tag (by id or name)
+- **`add_my_tag_to_tracks`** - Assign a My Tag to one or more tracks ⚠️ (Mutation)
+- **`remove_my_tag_from_tracks`** - Remove a My Tag from one or more tracks ⚠️ (Mutation)
+- **`create_my_tag_category`** - Create a new My Tag category (panel column) ⚠️ (Mutation)
+- **`create_my_tag`** - Create a new tag under an existing category ⚠️ (Mutation)
+- **`delete_my_tag`** - Delete a tag, or a whole category and its tags ⚠️ (Destructive)
+
+> ℹ️ My Tags are rekordbox's tagging system (the **My Tag** panel): categories such as
+> Genre / Components / Situation, each holding selectable tags. They are stored separately
+> from genres and comments, in the `djmdMyTag` / `djmdSongMyTag` tables.
 
 ### DJ History & Analytics
 - **`get_history_sessions`** - Get all DJ history sessions with metadata
