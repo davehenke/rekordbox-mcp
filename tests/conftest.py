@@ -1,6 +1,7 @@
 """Shared test fixtures for rekordbox-mcp tests."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional, List
 from unittest.mock import MagicMock
 
@@ -30,7 +31,9 @@ class MockContent:
     StockDate: str = ""
     BitRate: int = 0
     SampleRate: int = 0
+    FileSize: int = 0
     Commnt: str = ""
+    created_at: Optional[datetime] = None
     rb_local_deleted: int = 0
     ReleaseYear: Optional[int] = None
 
