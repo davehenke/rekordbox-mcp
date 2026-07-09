@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
+from datetime import datetime
 
 from rekordbox_mcp.database import RekordboxDatabase
 from rekordbox_mcp.models import SearchOptions, LibraryStats
@@ -234,6 +235,57 @@ class TestLibraryStatsReturn:
         assert isinstance(stats, LibraryStats)
         assert stats.total_tracks == 11  # excludes deleted
         assert stats.average_bpm > 0
+
+    async def test_rating_distribution_counts_int_buckets(self, database, mock_content_list):
+        mock_content_list[0].Rating = 0
+        mock_content_list[1].Rating = 5
+        mock_content_list[2].Rating = 5
+
+        stats = await database.get_library_stats()
+
+        assert stats.rating_distribution[0] == 3
+        assert stats.rating_distribution[5] == 3
+        assert all(isinstance(rating, int) for rating in stats.rating_distribution)
+
+    async def test_key_distribution_omits_empty_keys(self, database, mock_content_list):
+        mock_content_list[0].KeyName = ""
+        mock_content_list[1].KeyName = None
+
+        stats = await database.get_library_stats()
+
+        assert "" not in stats.key_distribution
+        assert stats.key_distribution["5A"] == 1
+
+    async def test_most_played_tracks_capped_ordered_and_excludes_zero(self, database, mock_content_list):
+        for content in mock_content_list:
+            content.DJPlayCount = 0
+        for content in mock_content_list[:11]:
+            content.DJPlayCount = content.ID
+
+        stats = await database.get_library_stats()
+
+        assert stats.most_played_tracks == ["11", "10", "9", "8", "7", "6", "5", "4", "3", "2"]
+
+    async def test_recently_added_tracks_ignores_missing_created_at(self, database, mock_content_list):
+        mock_content_list[0].created_at = None
+        mock_content_list[1].created_at = datetime(2024, 1, 1)
+        mock_content_list[2].created_at = datetime(2024, 3, 1)
+        mock_content_list[3].created_at = datetime(2024, 2, 1)
+
+        stats = await database.get_library_stats()
+
+        assert stats.recently_added_tracks[:3] == ["3", "4", "2"]
+        assert "1" not in stats.recently_added_tracks
+
+    async def test_total_size_bytes_sums_file_size(self, database, mock_content_list):
+        mock_content_list[0].FileSize = 100
+        mock_content_list[1].FileSize = 250
+        mock_content_list[2].FileSize = None
+        mock_content_list[11].FileSize = 1000
+
+        stats = await database.get_library_stats()
+
+        assert stats.total_size_bytes == 350
 
 
 class TestHistoryOperations:

@@ -486,9 +486,13 @@ class RekordboxDatabase:
             raise RuntimeError("Database not connected")
 
         def _inner():
+            track_list_limit = 10
             active_content = self._get_active_content()
             total_tracks = len(active_content)
             total_playtime = sum(getattr(c, "Length", 0) or 0 for c in active_content)
+            total_size_bytes = sum(
+                getattr(c, "FileSize", 0) or 0 for c in active_content
+            )
             avg_bpm = (
                 sum((getattr(c, "BPM", 0) or 0) / 100.0 for c in active_content)
                 / total_tracks
@@ -501,13 +505,49 @@ class RekordboxDatabase:
                 genre = getattr(content, "GenreName", "") or "Unknown"
                 genres[genre] = genres.get(genre, 0) + 1
 
+            keys: Dict[str, int] = {}
+            ratings: Dict[int, int] = {}
+            for content in active_content:
+                key = getattr(content, "KeyName", "") or ""
+                if key:
+                    keys[key] = keys.get(key, 0) + 1
+
+                rating = int(getattr(content, "Rating", 0) or 0)
+                ratings[rating] = ratings.get(rating, 0) + 1
+
+            most_played_tracks = [
+                str(c.ID)
+                for c in sorted(
+                    active_content,
+                    key=lambda c: getattr(c, "DJPlayCount", 0) or 0,
+                    reverse=True,
+                )
+                if (getattr(c, "DJPlayCount", 0) or 0) > 0
+            ][:track_list_limit]
+
+            recently_added_tracks = [
+                str(c.ID)
+                for c in sorted(
+                    [c for c in active_content if getattr(c, "created_at", None)],
+                    key=lambda c: getattr(c, "created_at", None),
+                    reverse=True,
+                )
+            ][:track_list_limit]
+
             return LibraryStats(
                 total_tracks=total_tracks,
                 total_playtime_seconds=total_playtime,
+                total_size_bytes=total_size_bytes,
                 average_bpm=round(avg_bpm, 2),
                 genre_distribution=dict(
                     sorted(genres.items(), key=lambda x: x[1], reverse=True)[:10]
                 ),
+                key_distribution=dict(
+                    sorted(keys.items(), key=lambda x: x[1], reverse=True)
+                ),
+                rating_distribution=dict(sorted(ratings.items())),
+                most_played_tracks=most_played_tracks,
+                recently_added_tracks=recently_added_tracks,
                 database_path=str(self.database_path),
                 last_updated=datetime.now().isoformat(),
             )
