@@ -6,6 +6,7 @@ from pathlib import Path
 
 from rekordbox_mcp.database import RekordboxDatabase
 from rekordbox_mcp.models import SearchOptions, LibraryStats
+from tests.conftest import MockPlaylistSong
 
 
 class TestConnection:
@@ -52,6 +53,16 @@ class TestDetectDatabasePath:
             path = db._detect_database_path()
             assert "Library" in str(path)
             assert "Pioneer" in str(path)
+
+    def test_prefers_rekordbox_subfolder(self, tmp_path):
+        """db_dir must be the folder holding master.db and masterPlaylists6.xml."""
+        (tmp_path / "Library" / "Pioneer" / "rekordbox").mkdir(parents=True)
+        db = RekordboxDatabase()
+        with patch("rekordbox_mcp.database.os.name", "posix"), \
+             patch("rekordbox_mcp.database.sys.platform", "darwin"), \
+             patch.object(Path, "home", return_value=tmp_path):
+            path = db._detect_database_path()
+            assert path == tmp_path / "Library" / "Pioneer" / "rekordbox"
 
     def test_windows(self):
         db = RekordboxDatabase()
@@ -180,6 +191,28 @@ class TestPlaylistOperations:
         assert tracks[0].title == "Deep House Groove"
         assert tracks[1].title == "Progressive Journey"
         assert tracks[2].title == "Trance Dream"
+
+
+    async def test_remove_track_passes_playlist_entry(self, database, mock_db):
+        """remove_from_playlist must get the DjmdSongPlaylist entry, not the content ID."""
+        assert await database.remove_track_from_playlist("100", "5")
+        mock_db.remove_from_playlist.assert_called_once()
+        playlist_arg, entry_arg = mock_db.remove_from_playlist.call_args.args
+        assert playlist_arg == 100
+        assert entry_arg.ID == 1002
+        assert entry_arg.ContentID == 5
+        mock_db.commit.assert_called()
+
+    async def test_remove_track_not_in_playlist(self, database, mock_db):
+        with pytest.raises(RuntimeError, match="not in playlist"):
+            await database.remove_track_from_playlist("100", "2")
+        mock_db.remove_from_playlist.assert_not_called()
+
+    async def test_remove_track_removes_duplicates(self, database, mock_db, mock_playlist_songs):
+        mock_playlist_songs.append(MockPlaylistSong(ID=1007, PlaylistID=100, ContentID=5, TrackNo=5))
+        await database.remove_track_from_playlist("100", "5")
+        removed = [c.args[1].ID for c in mock_db.remove_from_playlist.call_args_list]
+        assert sorted(removed) == [1002, 1007]
 
 
 class TestRankedQueries:
